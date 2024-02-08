@@ -1,1 +1,1 @@
-# SMPD1_PDAC
+# Functional changes of sphingolipids in pancreatic cancer
