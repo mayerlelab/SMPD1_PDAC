@@ -1,0 +1,297 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__EMT calculation__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "ggpubr",
+  "rstatix"
+)
+
+#devtools::install_github("umahajanatlmu/metapacR", ref="master", auth_token = "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")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_emt_bf")),
+       dir.create(file.path(paste0(here()), "results_emt_bf")), FALSE)
+
+save_plot <- function(x, filename, width = 7, height = 7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    svg(filename, width = width, height = height)
+    grid::grid.newpage()
+    grid::grid.draw(x)
+    dev.off()
+}
+
+extract_all_comparisons <- function(.tbl) {
+  .tbl %>%
+    dplyr::select(.data$group1, .data$group2) %>%
+    purrr::transpose() %>%
+    purrr::modify_depth(1, unlist)
+}
+```
+
+# prepare data
+
+```{r}
+file_list <- list.files(path = "../../Data/EMT_BF_images/output/",
+                        pattern = ".csv", 
+                        full.names = TRUE)
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each file and bind rows to the combined data frame
+for (file in file_list) {
+  # Read the CSV file
+  current_data <- read.csv(file)
+  
+  # Bind rows to the combined data frame
+  combined_data <- bind_rows(combined_data, current_data)
+}
+
+#### plot data
+dat <- combined_data[, grepl(paste("FileName_rawImage","Metadata_Clone","Metadata_EMT","AreaShape_FormFactor","AreaShape_Eccentricity","Neighbors_PercentTouching_Adjacent", sep = "|"), colnames(combined_data))]
+
+dat <- dat %>%
+  group_by(FileName_rawImage,Metadata_Clone, Metadata_EMT) %>%
+  summarise_all(mean) %>%
+  ungroup()
+
+dat$Metadata_Status <- ifelse(dat$Metadata_Clone == "wt", "WT", "KO")
+
+dat$merged_var <- paste(dat$Metadata_Status, dat$Metadata_EMT, sep = "_")
+dat$merged_var <- factor(dat$merged_var, levels = c("WT_c", "WT_b", "KO_c", "KO_b"))
+
+### pca data
+pca_dat <- combined_data[, grepl(paste("FileName_rawImage","^AreaShape_","^Neighbors_", sep = "|"), colnames(combined_data))]
+
+pca_dat <- pca_dat  %>%
+  group_by(FileName_rawImage) %>%
+  summarise_all(mean) %>%
+  ungroup()
+
+pca_dat <- pca_dat[, !grepl(paste("FileName_rawImage",
+                                  "_X$",
+                                  "_Y$",
+                                  #"_CentralMoment_", 
+                                  #"_HuMoment_",
+                                  #"_NormalizedMoment_",
+                                  "_SpatialMoment_",
+                                  "ObjectNumber",
+                                  sep = "|"),colnames(pca_dat))]
+
+
+pca_dat <- pca_dat %>%
+  select_if(~!any(is.na(.))) 
+
+#pca_dat <- scale(pca_dat, center = apply(pca_dat, 2, median))
+
+pca <- prcomp(pca_dat, center = TRUE, scale. = TRUE)
+
+pca_df <- as.data.frame(pca$x) %>%
+  bind_cols(dat)
+
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+
+p <- ggplot(pca_df,
+       aes(x=PC1,
+           y=PC2,
+           fill=merged_var)) +
+  ggdensity::geom_hdr() +
+  geom_point(shape=21,
+             color="black",
+             show.legend = FALSE)+
+  theme_bw() +
+  scale_fill_manual(values = c("#377EB8","#E41A1C","#32D71B","#F79C3C"))+ 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  ylim(c(-10,10))
+
+print(p)
+
+ggsave("./results_emt_bf/pca_plot.pdf",
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+#### plot data
+
+### form factor
+
+ttests <- dat %>%
+  wilcox_test(AreaShape_FormFactor ~ merged_var) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance() 
+
+ttests <- ttests %>%
+  filter(group1 == "WT_c" & group2=="WT_b" |
+           group1 == "KO_c" & group2=="KO_b" |
+           group1 == "WT_b" & group2=="KO_b")
+
+p <- ggplot(data=dat,
+            aes(x=merged_var, 
+                  y=AreaShape_FormFactor)) +
+  geom_boxplot(aes(fill=Metadata_EMT), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Metadata_Clone),
+                shape = 21,
+               width = 0.4, 
+                color= "black",
+                size=3, 
+                alpha= 0.8) +
+  stat_compare_means(comparisons = extract_all_comparisons(ttests), 
+                     label = "p.adj",
+                     method = "wilcox.test",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Mean Form Factor (AU)") +
+  ggtitle("Form factor: KPC1050") 
+
+print(p)
+
+ggsave("./results_emt_bf/form_factor.pdf",
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+### eccentricity
+
+ttests <- dat %>%
+  wilcox_test(AreaShape_Eccentricity ~ merged_var) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance() 
+
+ttests <- ttests %>%
+  filter(group1 == "WT_c" & group2=="WT_b" |
+           group1 == "KO_c" & group2=="KO_b" |
+           group1 == "WT_b" & group2=="KO_b")
+
+
+p <- ggplot(data=dat,
+            aes(x=merged_var, 
+                  y=AreaShape_Eccentricity)) +
+  geom_boxplot(aes(fill=Metadata_EMT), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Metadata_Clone),
+                shape = 21,
+               width = 0.4, 
+                color= "black",
+                size=3, 
+                alpha= 0.8) +
+  stat_compare_means(comparisons = extract_all_comparisons(ttests), 
+                     label = "p.adj",
+                     method = "wilcox.test",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Mean Eccentricity (AU)") +
+  ggtitle("Eccentricity: KPC1050") 
+
+print(p)
+
+ggsave("./results_emt_bf/Eccentricity.pdf",
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+### nearest neighbours
+
+ttests <- dat %>%
+  wilcox_test(Neighbors_PercentTouching_Adjacent ~ merged_var) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance() 
+
+ttests <- ttests %>%
+  filter(group1 == "WT_c" & group2=="WT_b" |
+           group1 == "KO_c" & group2=="KO_b" |
+           group1 == "WT_b" & group2=="KO_b")
+
+
+p <- ggplot(data=dat,
+            aes(x=merged_var, 
+                  y=Neighbors_PercentTouching_Adjacent)) +
+  geom_boxplot(aes(fill=Metadata_EMT), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Metadata_Clone),
+                shape = 21,
+               width = 0.4, 
+                color= "black",
+                size=3, 
+                alpha= 0.8) +
+  stat_compare_means(comparisons = extract_all_comparisons(ttests), 
+                     label = "p.adj",
+                     method = "wilcox.test",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Cell touching to the adjecent (%)") +
+  ggtitle("Nearest Neighbours: KPC1050") 
+
+print(p)
+
+ggsave("./results_emt_bf/Neighbors_PercentTouching_Adjacent.pdf",
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

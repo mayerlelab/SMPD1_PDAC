@@ -1,0 +1,164 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (find markers)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+```
+
+# cells
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## find markers
+```{r}
+find_markers <- findMarkers(results = results,
+                  dataList = expData,
+                  data.type = "Metabolon",
+                  species = "mmu",
+                  group = "CELL_GENOTYPE",
+                  p.value.cutoff = 0.05,
+                  auc.threshould = 0.60,
+                  fold.changes.cutoff = 1.5,
+                  nmarkers=50,
+                  rank.plot=FALSE,
+                  dot.plot=FALSE,
+                  heatmap=FALSE)
+
+## save results
+saveRDS(find_markers$raw.results, paste(here(), 
+                "results_metabolome_mm/cells/identified_markers_cells.rds", sep = "/"))
+
+```
+
+## markers violin
+```{r}
+p <- plotMarkerViolin(dataList = expData,
+                      grouping.variable = "CELL_GENOTYPE",
+                      data.type =  "Metabolon",
+                             species = "mmu",
+                      markers = find_markers$marker.metabolites$`S1KO - WT`,
+                      n.markers = 5)
+
+print(p)
+```
+## markers splitviolin
+```{r}
+p <- plotSplitViolin(dataList = expData,
+                      grouping.variable = "CELL_GENOTYPE",
+                     data.type =  "Metabolon",
+                     species = "mmu",
+                     markers = find_markers$marker.metabolites$`S1KO - WT`[1:10])
+
+
+print(p)
+```
+
+# supernatent
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/supernatent/expData_metabolon_untargeted_supernatent.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/supernatent/da_all_data_supernatent.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## find markers
+```{r}
+find_markers <- findMarkers(results = results,
+                  dataList = expData,
+                  data.type = "Metabolon",
+                  species = "mmu",
+                  group = "CELL_GENOTYPE",
+                  p.value.cutoff = 0.05,
+                  auc.threshould = 0.60,
+                  fold.changes.cutoff = 1.5,
+                  nmarkers=50,
+                  rank.plot=FALSE,
+                  dot.plot=FALSE,
+                  heatmap=FALSE)
+
+## save results
+saveRDS(find_markers$raw.results, paste(here(), 
+                "results_metabolome_mm/supernatent/identified_markers_supernatent.rds", sep = "/"))
+```
+
+## markers violin
+```{r}
+p <- plotMarkerViolin(dataList = expData,
+                      grouping.variable = "CELL_GENOTYPE",
+                      data.type =  "Metabolon",
+                             species = "mmu",
+                      markers = find_markers$marker.metabolites$`S1KO - WT`,
+                      n.markers = 5)
+
+print(p)
+```
+## markers splitviolin
+```{r}
+
+p <- plotSplitViolin(dataList = expData,
+                      grouping.variable = "CELL_GENOTYPE",
+                     data.type =  "Metabolon",
+                     species = "mmu",
+                     markers = find_markers$marker.metabolites$`S1KO - WT`[1:10])
+
+
+print(p)
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

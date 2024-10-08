@@ -1,0 +1,418 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Cer Smpd1 staining calculation__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "ggpubr",
+  "rstatix"
+)
+
+#devtools::install_github("umahajanatlmu/metapacR", ref="master", auth_token = "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")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_emt_bf")),
+       dir.create(file.path(paste0(here()), "results_emt_bf")), FALSE)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+```
+
+#  Plot KPC distribution
+
+```{r}
+file_list <- list.files(path = "../../Data/Smpd1-ceramide IF stainings/output/KPC/",
+                        pattern = ".csv", 
+                        full.names = TRUE)
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each file and bind rows to the combined data frame
+for (file in file_list) {
+  # Read the CSV file
+  current_data <- read.csv(file)
+  
+  # Bind rows to the combined data frame
+  combined_data <- bind_rows(combined_data, current_data)
+}
+
+#### plot data
+dat <- combined_data[, grepl(paste("FileName_IF","Metadata_Clone","Intensity_MeanIntensity_Cy3Ieven","Intensity_MeanIntensity_GFPeven", sep = "|"), colnames(combined_data))]
+
+dat$sample <- gsub("^([A-Za-z0-9]+)-.*", "\\1", dat$FileName_IF)
+dat$timepoint <- gsub("^[^-]+-([^-]+)-.*$", "\\1", dat$FileName_IF)
+dat$replicate <- gsub(".*-(.*)\\.tiff", "\\1", dat$FileName_IF)
+
+# dat <- dat %>%
+#   group_by(FileName_IF) %>%
+#   summarise_all(median) %>%
+#   ungroup()
+
+colfunc <- colorRampPalette(c("NA","#3783BB","#A6CFE3","#F7B799","#CA4841","#67001F"))
+
+
+p <- ggplot(dat,
+       aes(x=Intensity_MeanIntensity_Cy3Ieven,
+           y=Intensity_MeanIntensity_GFPeven)) +
+  stat_density2d(geom="tile", aes(fill = ..density..), contour = FALSE, show.legend = FALSE) +
+  scale_fill_gradientn(colours=colfunc(400)) + 
+  geom_density2d(colour="black", bins=5) +
+  geom_smooth(method = "lm", 
+              formula = y ~ x,
+              color="#E41A1C",
+              size= 0.8,
+              lty = "dotted") +
+  stat_cor() +
+  theme_bw() +
+  xlab("Smpd1 expression (Mean AU)") +
+  ylab("Ceramide abundance (Mean AU)") +
+  theme(
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  ) +
+  xlim(c(0, 0.5)) +
+  ylim(c(0, 0.5)) +
+  facet_wrap(~timepoint)
+
+print(p)
+
+ggsave("./results_emt_bf/KPC_cer_smpd1.pdf",
+       plot = p, 
+       width = 12,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+```
+
+
+#  Plot KC distribution
+
+```{r}
+file_list <- list.files(path = "../../Data/Smpd1-ceramide IF stainings/output/KC/",
+                        pattern = ".csv", 
+                        full.names = TRUE)
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each file and bind rows to the combined data frame
+for (file in file_list) {
+  # Read the CSV file
+  current_data <- read.csv(file)
+  
+  # Bind rows to the combined data frame
+  combined_data <- bind_rows(combined_data, current_data)
+}
+
+#### plot data
+dat <- combined_data[, grepl(paste("FileName_IF","Metadata_Clone","Intensity_MeanIntensity_Cy3Ieven","Intensity_MeanIntensity_GFPeven", sep = "|"), colnames(combined_data))]
+
+dat$sample <- gsub("^([A-Za-z0-9]+)-.*", "\\1", dat$FileName_IF)
+dat$timepoint <- gsub("^[^-]+-([^-]+)-.*$", "\\1", dat$FileName_IF)
+dat$replicate <- gsub(".*-(.*)\\.tiff", "\\1", dat$FileName_IF)
+
+dat$timepoint <- factor(dat$timepoint, levels = c("3m", "6m", "12m", "sur"))
+
+# dat <- dat %>%
+#   group_by(FileName_IF) %>%
+#   summarise_all(median) %>%
+#   ungroup()
+
+colfunc <- colorRampPalette(c("NA","#3783BB","#A6CFE3","#F7B799","#CA4841","#67001F"))
+
+
+p <- ggplot(dat,
+       aes(x=Intensity_MeanIntensity_Cy3Ieven,
+           y=Intensity_MeanIntensity_GFPeven)) +
+  stat_density2d(geom="tile", aes(fill = ..density..), contour = FALSE, show.legend = FALSE) +
+  scale_fill_gradientn(colours=colfunc(400)) + 
+  geom_density2d(colour="black", bins=5) +
+  geom_smooth(method = "lm", 
+              formula = y ~ x,
+              color="#E41A1C",
+              size= 0.8,
+              lty = "dotted") +
+  stat_cor() +
+  theme_bw() +
+  xlab("Smpd1 expression (Mean AU)") +
+  ylab("Ceramide abundance (Mean AU)") +
+  theme(
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  ) +
+  xlim(c(0, 0.5)) +
+  ylim(c(0, 0.5)) +
+  facet_wrap(~timepoint)
+
+print(p)
+
+ggsave("./results_emt_bf/KC_cer_smpd1.pdf",
+       plot = p, 
+       width = 10,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+```
+
+#  Plot KC differentiation
+
+```{r}
+file_list <- list.files(path = "../../Data/HE_differentiation/KC/",
+                        pattern = ".txt", 
+                        full.names = TRUE)
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each file and bind rows to the combined data frame
+for (file in file_list) {
+  # Read the CSV file
+  current_data <- read.table(file, sep = "\t", header =TRUE, check.names = FALSE)
+  
+  current_data <- current_data[current_data$Name == "PathAnnotationObject",]
+  
+  # Bind rows to the combined data frame
+  combined_data <- bind_rows(combined_data, current_data)
+}
+
+column_to_retain <- c("Image",
+                     "Num Detections",
+                     "Num ADM/early PANINs (base)",
+                     "Num Stroma (base)" , 
+                     "Num diffrentiated tumor (base)",
+                     "Num lymph knot (base)",
+                     "Num normal tissue (base)",
+                     "Num undifferentiated tumor (base)" ,
+                     "ADM/early PANINs: Positive %",
+                     "Stroma: Positive %" ,
+                     "diffrentiated tumor: Positive %",
+                     "lymph knot: Positive %",
+                     "normal tissue: Positive %",
+                     "undifferentiated tumor: Positive %"  
+                     )
+
+# rename columns
+mapping <- c(
+  'Stroma: Positive %' = 'Positive_Stroma',
+  'normal tissue: Positive %' = 'Positive_Normal',
+  'lymph knot: Positive %' = 'Positive_LymphNode',
+  'ADM/early PANINs: Positive %' = 'Positive_PanINs',
+  'diffrentiated tumor: Positive %' = 'Positive_Differentiated',
+  'undifferentiated tumor: Positive %' = 'Positive_Undifferentiated',
+  'Num ADM/early PANINs (base) %' = 'Total_PanINs',
+  'Num Stroma (base) %' = 'Total_Stroma',
+  'Num diffrentiated tumor (base) %' = 'Total_Differentiated',
+  'Num lymph knot (base) %' = 'Total_LymphNode',
+  'Num normal tissue (base) %' = 'Total_Normal',
+  'Num undifferentiated tumor (base) %' = 'Total_Undifferentiated'
+)
+
+#### plot data
+dat <- combined_data[ colnames(combined_data) %in% column_to_retain] %>%
+  mutate_all(~replace(., is.na(.), 0)) %>%
+  mutate(across(contains("base"), ~./`Num Detections` * 100, .names = "{col} %")) %>%
+  dplyr::select(matches("%"), Image) %>%
+  pivot_longer(!Image, names_to = "Group", values_to = "percentage") %>%
+  mutate(Group = case_when(
+    Group %in% names(mapping) ~ mapping[Group],
+    TRUE ~ as.character(Group)
+  ))
+
+
+dat$timepoint <- gsub("^([A-Za-z0-9]+)-.*", "\\1", dat$Image)
+dat$timepoint <- factor(dat$timepoint, levels = c("3M", "6M", "12M", "SURV"))
+
+dat <- dat %>%
+  dplyr::select(-Image) %>%
+  group_by(Group, timepoint) %>%
+  summarise_all(mean) %>%
+  ungroup() %>%
+  separate(col = "Group", sep = "_", into = c("Group1", "Stage")) %>%
+  pivot_wider(names_from = c("Group1", "timepoint"), values_from = "percentage", names_sep = "_") %>%
+  column_to_rownames("Stage") %>%
+  dplyr::select("Total_3M","Total_6M","Total_12M","Total_SURV",
+         "Positive_3M","Positive_6M","Positive_12M","Positive_SURV")
+
+dat <- dat[c("Normal", "LymphNode", "PanINs", "Differentiated", "Undifferentiated", "Stroma"),]
+
+library(RColorBrewer)
+p <- pheatmap::pheatmap(as.matrix(dat),
+                   scale= "none",
+                   col = colorRampPalette(rev(brewer.pal(10, "RdBu")))(100),
+                   fontsize_row = 10,
+                   fontsize_col = 10,
+                   cellwidth = 25,
+                   cellheight = 25,
+                   cutree_cols = 2,
+                   border_color = "#F7F7F7",
+                   cluster_rows = FALSE, 
+                   cluster_cols = FALSE)
+
+print(p)
+
+save_pheatmap_pdf(p,
+          "results_emt_bf/KC_distribution.pdf",
+          width=6,
+          height=4)
+
+```
+#  Plot KC differentiation
+
+```{r}
+file_list <- list.files(path = "../../Data/HE_differentiation/KPC/",
+                        pattern = ".txt", 
+                        full.names = TRUE)
+
+# Create an empty data frame to store the combined data
+combined_data <- data.frame()
+
+# Loop through each file and bind rows to the combined data frame
+for (file in file_list) {
+  # Read the CSV file
+  current_data <- read.table(file, sep = "\t", header =TRUE, check.names = FALSE)
+  
+  current_data <- current_data[current_data$Name == "PathAnnotationObject",]
+  
+  # Bind rows to the combined data frame
+  combined_data <- bind_rows(combined_data, current_data)
+}
+
+column_to_retain <- c("Image",
+                     "Num Detections",
+                     "Num ADM/early PANINs (base)",
+                     "Num Stroma (base)" , 
+                     "Num diffrentiated tumor (base)",
+                     "Num lymph knot (base)",
+                     "Num normal tissue (base)",
+                     "Num undifferentiated tumor (base)" ,
+                     "ADM/early PANINs: Positive %",
+                     "Stroma: Positive %" ,
+                     "diffrentiated tumor: Positive %",
+                     "lymph knot: Positive %",
+                     "normal tissue: Positive %",
+                     "undifferentiated tumor: Positive %"  
+                     )
+
+# rename columns
+mapping <- c(
+  'Stroma: Positive %' = 'Positive_Stroma',
+  'normal tissue: Positive %' = 'Positive_Normal',
+  'lymph knot: Positive %' = 'Positive_LymphNode',
+  'ADM/early PANINs: Positive %' = 'Positive_PanINs',
+  'diffrentiated tumor: Positive %' = 'Positive_Differentiated',
+  'undifferentiated tumor: Positive %' = 'Positive_Undifferentiated',
+  'Num ADM/early PANINs (base) %' = 'Total_PanINs',
+  'Num Stroma (base) %' = 'Total_Stroma',
+  'Num diffrentiated tumor (base) %' = 'Total_Differentiated',
+  'Num lymph knot (base) %' = 'Total_LymphNode',
+  'Num normal tissue (base) %' = 'Total_Normal',
+  'Num undifferentiated tumor (base) %' = 'Total_Undifferentiated'
+)
+
+combined_data <- combined_data[c(1,3:nrow(combined_data)),]
+combined_data$Image <- c(rep("2M",3),rep("3M",3),rep("SURV",3))
+
+#### plot data
+dat <- combined_data[ colnames(combined_data) %in% column_to_retain] %>%
+  mutate_all(~replace(., is.na(.), 0)) %>%
+  mutate(across(contains("base"), ~./`Num Detections` * 100, .names = "{col} %")) %>%
+  select(matches("%"), Image) %>%
+  pivot_longer(!Image, names_to = "Group", values_to = "percentage") %>%
+  mutate(Group = case_when(
+    Group %in% names(mapping) ~ mapping[Group],
+    TRUE ~ as.character(Group)
+  ))
+
+
+dat$timepoint <- dat$Image
+dat$timepoint <- factor(dat$timepoint, levels = c("2M", "3M", "SURV"))
+
+dat <- dat %>%
+  select(-Image) %>%
+  group_by(Group, timepoint) %>%
+  summarise_all(mean) %>%
+  ungroup() %>%
+  separate(col = "Group", sep = "_", into = c("Group1", "Stage")) %>%
+  pivot_wider(names_from = c("Group1", "timepoint"), values_from = "percentage", names_sep = "_") %>%
+  column_to_rownames("Stage") %>%
+  select("Total_2M","Total_3M","Total_SURV",
+         "Positive_2M","Positive_3M","Positive_SURV")
+
+dat <- dat[c("Normal", "LymphNode", "PanINs", "Differentiated", "Undifferentiated", "Stroma"),]
+
+
+p <- pheatmap::pheatmap(as.matrix(dat),
+                   scale= "none",
+                   col = colorRampPalette(rev(brewer.pal(10, "RdBu")))(100),
+                   fontsize_row = 10,
+                   fontsize_col = 10,
+                   cellwidth = 25,
+                   cellheight = 25,
+                   cutree_cols = 2,
+                   border_color = "#F7F7F7",
+                   cluster_rows = FALSE, 
+                   cluster_cols = FALSE)
+
+print(p)
+
+save_pheatmap_pdf(p,
+          "./results_emt_bf/KPC_distribution.pdf",
+          width=6,
+          height=4)
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

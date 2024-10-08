@@ -1,0 +1,390 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (pathway analysis)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR",
+  "pheatmap",
+  "circlize",
+  "RColorBrewer"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+```
+
+# cells
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+
+
+## differential abundance score
+```{r}
+diffAbundanceScore(species = "mmu",
+                     ref.path = NULL,
+                     results = results,
+                     p.value.cutoff = 0.001,
+                     fold.changes.cutoff = 5,
+                     save = "pdf",
+                     data.type = "Metabolon",
+                     fig.width = 12,
+                     fig.height = 9,
+                     dpi = 300,
+                     Other_metadata = NULL)
+
+```
+
+## KEGG analysis
+```{r}
+enrichmentScore.KEGG(species = "mmu",
+                     ref.path = NULL,
+                     results = results,
+                     p.value.cutoff = 0.005,
+                     fold.changes.cutoff = 2,
+                     save = "pdf",
+                     data.type = "Metabolon",
+                     fig.width = 6,
+                     fig.height = 4,
+                     dpi = 300,
+                     Other_metadata = NULL)
+
+## subset per cluster
+cluster <- readRDS("results_metabolome_mm/cells/identified_clusters.rds")
+
+for (i in unique(cluster$Cluster)) {
+  print(i)
+  
+  results_sub <- results[results$Metabolite_Name %in% rownames(cluster[cluster$Cluster == i,,drop=FALSE]),]
+  
+  a <- enrichmentScore.KEGG(species = "mmu",
+                     ref.path = NULL,
+                     results = results_sub,
+                     p.value.cutoff = 0.005,
+                     fold.changes.cutoff = 2,
+                     save = "none",
+                     data.type = "Metabolon",
+                     fig.width = 12,
+                     fig.height = 9,
+                     dpi = 300,
+                     Other_metadata = NULL)
+  
+  print(a)
+}
+```
+
+## enrichedNetwork
+```{r}
+aa <- enrichedNetwork(species ="mmu",
+                            ref.path = NULL,
+                            results,
+                            p.value.cutoff = 0.005,
+                            fold.changes.cutoff = 2,
+                            network.method = "diffusion",
+                            legend.pathway = 1,
+                            save = "pdf",
+                            data.type = "Metabolon",
+                            fig.width = 16,
+                            fig.height = 12,
+                            Other_metadata = NULL)
+
+
+## subset per cluster
+cluster <- readRDS("results_metabolome_mm/cells/identified_clusters.rds")
+
+result_list <- list()
+
+for (i in unique(cluster$Cluster)) {
+  print(i)
+  
+  results_sub <- results[results$Metabolite_Name %in% rownames(cluster[cluster$Cluster == i,,drop=FALSE]),]
+  
+  a <- enrichedNetwork(species ="mmu",
+                            ref.path = NULL,
+                            results_sub,
+                            p.value.cutoff = 0.005,
+                            fold.changes.cutoff = 2,
+                            network.method = "diffusion",
+                            legend.pathway = 1,
+                            save = "none",
+                            data.type = "Metabolon",
+                            fig.width = 16,
+                            fig.height = 12,
+                            Other_metadata = NULL)
+ result_list[[i]] <- a
+}
+```
+
+```{r}
+df1 <- result_list[["Cluster1"]][["results"]]
+df1$Cluster <- "Cluster1"
+df2 <- result_list[["Cluster2"]][["results"]]
+df2$Cluster <- "Cluster2"
+df3 <- result_list[["Cluster3"]][["results"]]
+df3$Cluster <- "Cluster3"
+
+df <- plyr::rbind.fill(list(df1,df2,df3))
+
+hub_weight = 0.2
+auth_weight = 0.2
+strength_weight = 0.2
+degree_weight = 0.1 
+eigenvector_weight = 0.1
+
+# Normalize function (min-max normalization)
+normalize <- function(x) {
+    return((x - min(x)) / (max(x) - min(x)))
+}
+
+df$nHubscore <- normalize(df$Hubscore)
+df$nAuthScore <- normalize(df$Authscore)
+df$nEigen <- normalize(df$Eigen)
+df$nStength <- normalize(df$strength)
+df$nCentrality <- normalize(df$centrality)
+
+
+df$node_importance <- hub_weight*df$nHubscore + 
+  auth_weight*df$nAuthScore + 
+  strength_weight* df$nStength +
+  degree_weight* df$nCentrality +
+  eigenvector_weight*df$nEigen
+
+hub_mat <- df %>%
+  filter(Entry.type == "pathway") %>%
+  dplyr::select(KEGG.name, node_importance, Cluster) %>%
+  group_by(KEGG.name,Cluster) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup() %>%
+  pivot_wider(values_from = node_importance, names_from = Cluster) %>%
+  column_to_rownames("KEGG.name") %>%
+  replace(is.na(.), 0) 
+
+
+## plot heatmap
+## ----------------------------------------------------------------
+heatmap_dat <- as.matrix(hub_mat)
+cluster_size <- 3
+
+# basic heatmap 
+heatmap.px <- pheatmap(
+  heatmap_dat,
+  kmean_k = cluster_size,
+  clustering_method = "ward.D2",
+  #clustering_distance_rows = "minkowski",
+  #clustering_distance_cols = "minkowski",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  silent = TRUE,
+   na_col = "grey"
+)
+## annotation_rows 
+cluster <-
+  cbind(heatmap.px, cluster = cutree(heatmap.px$tree_row, k = cluster_size))
+cluster <- as.data.frame(unlist(cluster[, 2]))
+colnames(cluster) <- c("Cluster")
+cluster$Cluster <- sub("^", "Cluster", cluster$Cluster)
+
+## annotation row colors
+cluster.col <- brewer.pal(length(unique(cluster$Cluster)), "Dark2")
+names(cluster.col) <- unique(cluster$Cluster)
+
+combo.cols <-
+  list(
+    Cluster = cluster.col
+  )
+## plot heatmap
+heatmap.p <- pheatmap(
+  heatmap_dat,
+  color = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+  clustering_method = "ward.D2",
+  clustering_distance_rows = "minkowski",
+  clustering_distance_cols = "minkowski",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = TRUE,
+  show_colnames = TRUE,
+  cex = 1,
+  cellwidth = 10,
+  cellheight = 9,
+  border_color = FALSE,
+  main = "Node importance",
+  display_numbers = FALSE,
+  cutree_rows  = cluster_size
+)
+
+save_pheatmap_pdf(heatmap.p,
+                  "results_metabolome_mm/cells/authscore.pdf",
+                  height = 13)
+
+```
+
+##
+```{r}
+tvalue_cutoff <- 2
+
+
+kegg_list <- c("mmu04010", "mmu04012", "mmu04014", "mmu04015", "mmu04310", "mmu04330", "mmu04340","mmu04350","mmu04390","mmu04370","mmu04371",
+          "mmu04630","mmu04064","mmu04668","mmu04066","mmu04068","mmu04020","mmu04070","mmu04071","mmu04072","mmu04024", "mmu04022",
+          "mmu04151", "mmu04152", "mmu04150")
+
+mat <- expData[["imputed.matrix"]]
+
+
+res_das <- data.frame()
+
+for (k in kegg_list) {
+  
+  
+  res_das_sub <- data.frame(matrix(ncol =4))
+  colnames(res_das_sub) <- c("pathway", "name", "das", "impact")
+  
+  res_das_sub$pathway <- k
+  
+  res_das_sub$name <- KEGGREST::keggGet(k)[[1]][["NAME"]]
+  
+  ## list reference compounds
+  listReferenceComp <- suppressWarnings(KEGGREST::keggGet(k)[[1]][["COMPOUND"]])
+  compoundID <- names(listReferenceComp)
+  
+  subset_chemicalMetadata <- chemicalMetadata[chemicalMetadata$KEGG %in% compoundID,,drop = FALSE]
+  
+  count_total <- nrow(results[results$Metabolite %in% subset_chemicalMetadata$MET_CHEM_NO, ,drop = FALSE])
+  
+  positive <- results[results$logFC >= tvalue_cutoff & results$Metabolite %in% subset_chemicalMetadata$MET_CHEM_NO, ,drop = FALSE]
+  
+  num_positive <- nrow(positive)
+  
+  if (is.null(num_positive)) {
+    num_positive <- 0
+  }
+  
+  negative <- results[results$logFC <= -tvalue_cutoff & results$Metabolite %in% subset_chemicalMetadata$MET_CHEM_NO, ,drop = FALSE]
+  
+  num_negative <- nrow(negative)
+  
+  if (is.null(num_negative)) {
+    num_negative <- 0
+  }
+ 
+  res_das_sub$das <- (as.numeric(num_positive) - as.numeric(num_negative)) / as.numeric(count_total)
+  
+  res_das_sub$impact <- as.numeric(nrow(distinct(bind_rows(positive, negative))))/length(compoundID)
+ 
+  
+  res_das <- rbind(res_das, res_das_sub)
+  
+}
+
+res_das <- res_das[is.finite(res_das$das),]
+
+res_das$name <- gsub("\\ - .*","",res_das$name)
+
+p <- ggplot(res_das,
+            aes(x=das,
+                y=fct_reorder(name, das))) +
+   geom_segment(
+        aes(xend =0, 
+            yend = name),
+        alpha = 0.5,
+        color="black"
+      ) +
+  geom_point(aes(size=impact,
+                fill=das),
+             shape=21,
+             color="black") +
+  theme_bw() +
+      theme(
+        panel.border = element_rect(
+          colour = "black",
+          fill = NA,
+          size = 1
+        ),
+        axis.text = element_text(
+          size = 11,
+          # face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      scale_fill_gradientn(
+        limits = c(0.25, 1),
+        colours = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+        oob = scales::squish,
+        name = "Differential\nabundance score"
+      ) +
+      guides(fill = guide_colourbar(
+        barwidth = unit(0.3, "cm"),
+        ticks.colour = "black",
+        frame.colour = "black"
+      )) +
+  labs(x="Differential abundance score",
+       y="",
+       size="Pathway\nimpact")
+
+print(p)
+
+ggsave("./results_metabolome_mm/das.pdf",
+         plot = p, 
+         width = 15,
+         height = 10,
+         dpi = 300,
+         units = "cm")
+
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

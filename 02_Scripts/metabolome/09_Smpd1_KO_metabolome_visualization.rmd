@@ -1,0 +1,1375 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (visualization)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR",
+  "pheatmap",
+  "circlize",
+  "RColorBrewer"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+
+get_lower_tri<-function(cormat){
+  cormat[upper.tri(cormat)] <- NA
+  return(cormat)
+}
+```
+
+# cells
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## boxplots
+```{r}
+boxPlots(dataList = expData,
+         data.type = "Metabolon",
+         species = "mmu",
+         group = "CELL_GENOTYPE",
+         path="results_metabolome_mm/cells")
+```
+
+## roc 
+```{r}
+rocPlots(dataList = expData,
+         data.type = "Metabolon",
+         species = "mmu",
+         group = "CELL_GENOTYPE",
+         var.imp = "S1KO",
+         path="results_metabolome_mm/cells") 
+```
+
+## CER/SM ratio
+
+```{r}
+imputed.data <- expData[["raw.counts"]] %>%
+  mutate(across(where(is.numeric), ~replace_na(., median(., na.rm=TRUE)))) %>%
+  sjmisc::rotate_df()
+
+metadata <- expData[["metadata"]]
+## assign column names
+colnames(imputed.data) <- metadata$CELL_GENOTYPE
+
+
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  mutate(across(everything(), as.character)) %>%
+  rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME")) %>%
+  mutate_all(na_if,"") %>%
+  distinct()
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  add_rownames("Metabolite") %>%
+  inner_join(metabolite.class, by="Metabolite") %>%
+  filter(SUPER_PATHWAY == "Complex lipids") %>%
+  filter(grepl("^CER|^SM",Metabolite)) %>%
+  separate(col=Metabolite, into = c("Metabolite", "chain_length"), sep = "[(]") %>%
+  mutate(chain_length = gsub("[)]", "", chain_length))  %>%
+  #filter(!chain_length %in% c("20:1", "24:0")) %>%
+  group_by(Metabolite) %>%
+  summarize_if(is.numeric, funs(mean)) %>%
+  ungroup() %>%
+  summarize_if(is.numeric, funs(.[Metabolite == "CER"] / .[Metabolite == "SM"])) %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("Status") %>%
+  mutate(Status = gsub("\\..*", "", Status)) %>%
+  rename(ratio = V1)
+
+library(rstatix)
+library(ggpubr)
+
+stat.test <- imputed.data.total %>% 
+ t_test(ratio ~ Status) %>%
+  add_xy_position(
+          x = "Status",
+          step.increase = 0.15
+        )
+
+imputed.data.total$Status <- relevel(factor(imputed.data.total$Status), ref = "WT")
+
+p <- ggplot(imputed.data.total,
+            aes(x=Status,
+                y=ratio,
+                fill=Status)
+            ) +
+  geom_jitter(
+          shape = 21,
+          size = 2,
+          width = 0.2,
+          color = "black",
+          alpha = 0.3,
+          show.legend = FALSE
+        ) +
+  geom_boxplot(show.legend = FALSE) +
+  stat_pvalue_manual(
+          #y = 1,
+          stat.test,
+          label = "p",
+          tip.length = 0.01,
+          color = "gray50",
+          size = 4,
+          bracket.size = 0.6,
+          inherit.aes = FALSE
+        ) +
+  xlab("") +
+  ylab("CER/SM ratio") +
+  theme_bw() +
+  theme(
+    axis.line = element_line(size = 0.5),
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  ) +
+  scale_fill_manual(values=c("#377EB8","#E41A1C")) 
+
+print(p)
+
+# sjPlot::save_plot(filename = paste0("./results_metapac_vd2/CER_SM_ratio.svg"),
+#                   fig = p,
+#                   width = 8,
+#                   height = 7,
+#                   dpi = 300)
+
+ggsave("./results_metabolome_mm/CER_SM_ratio.pdf",
+         plot = p, 
+         width = 5,
+         height = 6,
+         dpi = 300,
+         units = "cm")
+```
+
+## plot heatmap
+```{r}
+t_value_cutoff <- 2
+## define cluster -----------------------------------------------------------
+cluster_size <- 3
+
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  mutate(across(everything(), as.character)) %>%
+  rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME")) %>%
+  mutate_all(na_if,"") %>%
+  distinct()
+
+## select only complex lipids
+#metabolite.class <- metabolite.class[metabolite.class$SUPER_PATHWAY %in% "Complex lipids",]
+
+## load imputed data matrix
+## ----------------------------------------------------------------
+imputed.data <- expData[["imputed.matrix"]]
+
+colnames(imputed.data) <- metabolite.class$MetaboliteName[match(colnames(imputed.data), metabolite.class$Metabolite)]
+
+#imputed.data <- imputed.data[, !grepl("^NA(\\.\\d+)?$", names(imputed.data))]
+#imputed.data <- imputed.data[, !is.na(colnames(imputed.data))]
+
+# load normalization reasults
+## ----------------------------------------------------------------
+normalization.results <- results %>%
+  filter(t.ratio <= -t_value_cutoff | t.ratio >= t_value_cutoff)
+
+## subset imputed data
+## ----------------------------------------------------------------
+imputed.data <- imputed.data[, colnames(imputed.data) %in% unique(normalization.results$Metabolite_Name)]
+rownames(imputed.data) <- expData[["metadata"]]$PARENT_SAMPLE_NAME
+
+## plot heatmap
+## ----------------------------------------------------------------
+heatmap_dat <- as.matrix(t(imputed.data))
+
+# basic heatmap 
+heatmap.px <- pheatmap(
+  heatmap_dat,
+  #kmean_k = cluster_size,
+  clustering_method = "ward.D2",
+  #clustering_distance_rows = "minkowski",
+  #clustering_distance_cols = "minkowski",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  silent = TRUE
+)
+## annotation_rows 
+cluster <-
+  cbind(heatmap.px, cluster = cutree(heatmap.px$tree_row, k = cluster_size))
+cluster <- as.data.frame(unlist(cluster[, 2]))
+colnames(cluster) <- c("Cluster")
+cluster$Cluster <- sub("^", "Cluster", cluster$Cluster)
+# cluster$Metabolite_Class <- metabolite.class$SUPER_PATHWAY[match(rownames(cluster), metabolite.class$MetaboliteName)]
+# cluster$Metabolite_Subclass <- ifelse(grepl(
+#                 paste(c("^HCER", "^CER", "^SM"), collapse = "|"), 
+#                       rownames(cluster)) & cluster$Metabolite_Class == "Complex lipids", 
+#         "Sphingolipid", 
+#         ifelse(
+#             !grepl(
+#                 paste(c("^HCER", "^CER", "^SM"), collapse = "|"), 
+#                       rownames(cluster)) & cluster$Metabolite_Class == "Complex lipids",
+#                 "Others lipids", 
+#                 "Others"
+#             )
+#         )
+
+## annotation_columns
+panel <- expData[["metadata"]] %>%
+  dplyr::select(PARENT_SAMPLE_NAME, CELL_GENOTYPE, GROUP_ID) %>%
+  column_to_rownames("PARENT_SAMPLE_NAME")
+
+## annotation row colors
+cluster.col <- brewer.pal(length(unique(cluster$Cluster)), "Dark2")
+names(cluster.col) <- unique(cluster$Cluster)
+
+# metab.class.col <- brewer.pal(length(unique(cluster$Metabolite_Class)), "RdYlGn")
+# names(metab.class.col) <- unique(cluster$Metabolite_Class)
+# 
+# metab.subclass.col <- brewer.pal(length(unique(cluster$Metabolite_Subclass)), "Dark2")
+# names(metab.subclass.col) <- unique(cluster$Metabolite_Subclass)
+
+## annotation row colors
+sample.col <- c("#377EB8","#E41A1C")
+names(sample.col) <- unique(panel$CELL_GENOTYPE)
+
+clone.col <- c("#2166AC","#B2182B","#EF8A62","#FDDBC7")
+names(clone.col) <- unique(panel$GROUP_ID)
+
+combo.cols <-
+  list(
+    Cluster = cluster.col,
+    # Metabolite_Class = metab.class.col,
+    # Metabolite_Subclass = metab.subclass.col,
+    CELL_GENOTYPE = sample.col,
+    GROUP_ID = clone.col
+  )
+## plot heatmap
+heatmap.p <- pheatmap(
+  t(heatmap_dat),
+  color = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+  clustering_method = "ward.D2",
+  #clustering_distance_rows = "minkowski",
+  #clustering_distance_cols = "minkowski",
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  cex = 1,
+  border_color = FALSE,
+  main = "Metabolites distribution",
+  display_numbers = FALSE,
+  cellwidth = 0.5,
+  cellheight = 5,
+  annotation_row = panel,
+  annotation_col = cluster,
+  annotation_colors = combo.cols,
+  cutree_cols  = cluster_size
+)
+
+save_pheatmap_pdf(heatmap.p,
+                  "results_metabolome_mm/cells/heatmap_with_clusters.pdf",
+                  width = 8,
+                  height= 4)
+
+print(heatmap.p)
+
+## save results
+saveRDS(cluster, paste(here(), 
+                "results_metabolome_mm/cells/identified_clusters.rds", sep = "/"))
+```
+
+## cluster specific abundance
+
+```{r}
+
+imputed.data.cluster.all <- data.frame()
+
+for (i in unique(cluster$Cluster)) {
+  print(i)
+  imputed.data.cluster <- imputed.data[, colnames(imputed.data) %in% rownames(cluster[cluster$Cluster == i, , drop=FALSE])]
+  
+  imputed.data.cluster <- merge(imputed.data.cluster, panel, by = 0)
+  
+  imputed.data.cluster <- imputed.data.cluster %>%
+    column_to_rownames("Row.names") %>%
+    dplyr::select(-GROUP_ID) %>%
+    group_by(CELL_GENOTYPE) %>%
+    mutate_if(is.numeric, median) %>%
+    ungroup() %>%
+    distinct() %>%
+    pivot_longer(!CELL_GENOTYPE, names_to = "metabolites", values_to = "abundance") %>%
+    mutate(cluster = i) 
+  
+  imputed.data.cluster.all <- imputed.data.cluster.all %>%
+    bind_rows(imputed.data.cluster)
+
+}
+
+imputed.data.cluster.all$CELL_GENOTYPE <- factor(imputed.data.cluster.all$CELL_GENOTYPE, levels=c("WT", "S1KO"))
+
+p <- ggplot(imputed.data.cluster.all,
+            aes(x=CELL_GENOTYPE,
+                y=abundance,
+                fill=CELL_GENOTYPE)) +
+  geom_violin(color="black",
+               show.legend = FALSE) +
+  geom_boxplot(color="black",
+               show.legend = FALSE,
+                width = 0.1) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggpubr::stat_compare_means(aes(x= CELL_GENOTYPE, 
+                         y= abundance), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  xlab("") +
+  ylab("Normalized abundance") +
+  facet_wrap(~cluster) + 
+  theme(strip.background = element_blank())
+
+print(p)
+
+ggsave("results_metabolome_mm/cells/abundance_per cluster.pdf",
+         plot = p, 
+         width = 8,
+         height = 6,
+         dpi = 300,
+         units = "cm")
+
+
+```
+```{r}
+#' @title correlationPlot
+#'
+#' @description function to plot intragroup correlation plot.
+#'
+#' @param dataList normalized data
+#' @param data.type  select platform used, c("MH", "Metabolon", "Others")
+#' @param species species to use "hsa" or "mmu"
+#' @param group grouping variables
+#'
+#' @import tidyverse
+#' @importFrom Hmisc rcorr
+#' @importFrom psych corr.test
+#' @importFrom ggnewscale new_scale_fill
+#' @importFrom reshape2 melt
+#' @import graphics
+#' @import grDevices
+#' @import here
+#'
+#' @return correlation matrix as a list and pdf output in defined path folder.
+#'
+#' @export
+#' 
+#' 
+
+.correlationPlot <- function(dataList,
+                            data.type = c("MH", "Metabolon", "Others"),
+                            species = c("hsa", "mmu"),
+                            group = NULL,
+                            var.imp = NULL) {
+
+  options(warn = -1) ## supress all warning
+
+  stopifnot(inherits(dataList, "list"))
+  validObject(dataList)
+
+  species <- match.arg(species, c("hsa", "mmu"))
+  data.type <- match.arg(data.type, c("MH", "Metabolon", "Others"))
+
+  if (is.null(group)) {
+    stop("group variable is missing")
+  } else if (length(group) != 1) {
+    stop("multiple group variables available....provide only one group variable")
+  }
+
+
+  ## add metabolite annotation
+  ## ----------------------------------------------------------------
+  if (data.type == "Metabolon" && species %in% c("hsa", "mmu")) {
+    data("chemicalMetadata")
+    metabolite.class <- force(chemicalMetadata)
+
+    metabolite.class <- metabolite.class %>%
+      mutate(across(everything(), as.character)) %>%
+      rename(c("Metabolite" = "MET_CHEM_NO",
+               "MetaboliteName" = "CHEMICAL_NAME"))
+  }
+
+  if (data.type == "MH" && species == "hsa") {
+
+    data("chemicalMetadata_MH")
+    metabolite.class <- force(chemicalMetadata_MH)
+
+    metabolite.class <- metabolite.class %>%
+      mutate(across(everything(), as.character)) %>%
+      rename(
+        c("MetaboliteClass" = "ONTOLOGY1_NAME",
+          "lipidClass" = "ONTOLOGY2_NAME",
+          "MetaboliteName" = "METABOLITE_NAME"
+        )
+      )
+  }
+
+  if (data.type == "MH" && species == "mmu") {
+    data("chemicalMetadata_MH_mmu")
+    metabolite.class <- force(chemicalMetadata_MH_mmu) %>%
+      rename(
+        c(
+          "MetaboliteClass" = "ONTOLOGY1_NAME",
+          "lipidClass" = "ONTOLOGY2_NAME",
+          "MetaboliteName" = "METABOLITE_NAME"
+        )
+      )
+  }
+
+  if (data.type == "Others") {
+    metabolite.class <- Other_metadata
+
+    metabolite.class <- metabolite.class %>%
+      mutate(across(everything(), as.character)) %>%
+      rename(
+        c(
+          "MetaboliteClass" = "Ontology_Class",
+          "lipidClass" = "Ontology_Subclass",
+          "MetaboliteName" = "Metabolite_Name"
+        )
+      )
+  }
+
+
+  ## load imputed data matrix
+  ## ----------------------------------------------------------------
+  imputed.data <- dataList[["imputed.matrix"]]
+
+  colnames(imputed.data) <- metabolite.class$MetaboliteName[match(colnames(imputed.data), metabolite.class$Metabolite)]
+
+  ## load metadata
+  ## ----------------------------------------------------------------
+  metadata.data <- dataList[["metadata"]]
+
+  ## subset metadata
+  ## ----------------------------------------------------------------
+  select.columns <- group
+  row_names <- rownames(metadata.data)
+  metadata.data <- metadata.data[, colnames(metadata.data) %in% select.columns, drop = FALSE]
+
+  ## define factors
+  ## ----------------------------------------------------------------
+  for (c in colnames(metadata.data)) {
+    if (mode(metadata.data[[c]]) %in% c("character", "factor")) {
+      metadata.data[[c]] <- as.factor(metadata.data[[c]])
+    } else if (mode(metadata.data[[c]]) == "difftime") {
+      metadata.data[[c]] <- as.numeric(metadata.data[[c]])
+    } else {
+      metadata.data[[c]] <- as.numeric(metadata.data[[c]])
+    }
+  }
+
+  rownames(metadata.data) <- row_names
+
+  ## merge Data
+  ## ----------------------------------------------------------------
+  data <- bind_cols(metadata.data, imputed.data)
+
+  ## convert to characters
+  data[[group]] <- as.character(data[[group]])
+
+  data <- data[, !is.na(colnames(data))]
+
+  ## unique combinations
+  if (length(unique(data[[group]])) == 2) {
+
+    corr_mat_list <- list()
+
+    for (i in unique(data[[group]])) {
+      temp <- data[data[[group]] == i, !colnames(data) %in% group]
+
+      temp <- temp[, colSums(is.na(temp)) != nrow(temp)]
+      
+      if (nrow(temp) < 4) {
+        
+        # data_simulated <-  colMeans(temp)
+        # temp <- bind_rows(temp, data_simulated)
+        # data_simulated <-  robustbase::colMedians(as.matrix(temp))
+        # temp <- bind_rows(temp, data_simulated)
+      }
+      
+      #temp <- t(temp)
+      corr_mat <- psych::corr.test(as.matrix(temp),
+                                   y = NULL,
+                                   use = "complete.obs",
+                                   method="pearson",
+                                   adjust="none",  ## fdr
+                                   alpha=.05,
+                                   ci=FALSE,
+                                   normal=FALSE)
+      ## save corr mat
+      corr_mat_list[[i]] <- corr_mat
+    }
+  }
+  else if (length(unique(data[[group]])) > 2) {
+
+    if (is.null(var.imp)) {
+      stop("provide one var.imp")
+    }
+
+    data[[group]] <- ifelse(data[[group]] == var.imp, var.imp, "rest")
+
+
+    corr_mat_list <- list()
+
+    for (i in unique(data[[group]])) {
+      temp <- data[data[[group]] == i, !colnames(data) %in% group]
+      #temp <- t(temp)
+      corr_mat <- psych::corr.test(as.matrix(temp),
+                                   y = NULL,
+                                   use = "complete.obs",
+                                   method="pearson",
+                                   adjust="none",
+                                   alpha=.05,
+                                   ci=FALSE,
+                                   minlength=5,
+                                   normal=FALSE)
+      ## save corr mat
+      corr_mat_list[[i]] <- corr_mat
+    }
+
+
+  }
+
+  return(list(results = corr_mat_list))
+
+  options(warn = 0) ## reset all warnings
+
+}
+
+```
+
+## correlation plots
+```{r}
+cor_plot <- .correlationPlot(dataList = expData,
+                            data.type = "Metabolon",
+                            species = "mmu",
+                            group = "CELL_GENOTYPE")
+
+## save results
+saveRDS(cor_plot, paste(here(), 
+                "results_metabolome_mm/cells/corr_results.rds", sep = "/"))
+```
+
+### plot
+```{r}
+p.cutoff <- 0.001 
+
+#### WT
+corr1 <- cor_plot$results$WT
+
+cor_matrix_r1 <- corr1$r
+cor_matrix_r1[is.na(cor_matrix_r1)] <- 0
+corr_matrix_r1 <- get_lower_tri(cor_matrix_r1)
+
+corr_matrix_r1 <- corr_matrix_r1 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("r"="value"))
+
+cor_matrix_p1 <- corr1$p
+cor_matrix_p1[is.na(cor_matrix_p1)] <- 1
+
+corr_matrix_p1 <- get_lower_tri(cor_matrix_p1)
+
+corr_matrix_p1 <- corr_matrix_p1 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("p"="value"))
+
+cluster$Var1 <- rownames(cluster)
+
+corr_matrix_rp1 <- corr_matrix_r1 %>%
+  inner_join(corr_matrix_p1, by =c("Var1", "Var2")) %>%
+  dplyr::filter(p < p.cutoff) %>%
+  inner_join(cluster, by="Var1") %>%
+  dplyr::filter(Var1 != Var2)
+
+corr_matrix_rp1$clusters2 <- cluster$Cluster[match(corr_matrix_rp1$Var2, cluster$Var1)]
+
+corr_matrix_rp1 <- corr_matrix_rp1 %>%
+  group_by(Cluster) %>%
+  count(clusters2) %>%
+  ungroup() %>%
+  drop_na()
+
+corr_matrix_m1 <- corr_matrix_rp1 %>%
+  mutate(percentage = n *100/sum(n)) %>%
+  dplyr::select(-n)
+
+# ll <- unique(c(corr_matrix_m1$Var2_MetaboliteClass, corr_matrix_m1$Var3))
+ll <- unique(c(corr_matrix_m1$Cluster, corr_matrix_m1$clusters2))
+grid.col <- colorRampPalette(brewer.pal(3, "Dark2"))(length(ll))
+grid.col <- setNames(grid.col, ll)
+
+{ pdf(file = "results_metabolome_mm/cells/WT_cord_diagram.pdf", width = 4, height = 4)
+circos.clear()
+
+circos.par(track.margin = c(0, 0), start.degree = 90)
+
+chordDiagram(corr_matrix_m1,
+             grid.col = grid.col,
+             transparency = 0.2,
+             directional = -1,
+             direction.type = c("diffHeight"),
+             scale = TRUE,
+             diffHeight = -mm_h(2), 
+             link.sort = TRUE, 
+             self.link = 2,
+             link.decreasing = TRUE,
+             link.largest.ontop = TRUE, 
+             link.lwd = 0.25,    # Line width
+             link.lty = 1,    # Line type
+             link.border = 1,
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = 0.1),
+             big.gap = 10)
+
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(CELL_META$xcenter, 
+              ylim[1] + cm_h(2), 
+              sector.name, 
+              facing = "bending.outside",
+              niceFacing = TRUE, 
+              adj = c(0.5, 0.5),
+              cex = 1,
+              col=grid.col[sector.name],
+              font = 2)
+}, bg.border = NA)
+
+## total correlations 
+total_rp1 <- sum(corr_matrix_rp1$n)
+print(paste("total significantly enriched correlations = ", total_rp1))
+
+mytitle = "WT cells"
+mysubtitle = paste(total_rp1, "correlations")
+
+mtext(side=3, line=-1.75, adj=0.5, cex=1, font = 2, mytitle, outer = TRUE)
+mtext(side=3, line=-2.75, adj=0.5, cex=1, mysubtitle, outer = TRUE)
+
+dev.off()
+}
+
+### SMPD1 KO
+
+corr2 <- cor_plot$results$S1KO
+
+cor_matrix_r2 <- corr2$r
+cor_matrix_r2[is.na(cor_matrix_r2)] <- 0
+corr_matrix_r2 <- get_lower_tri(cor_matrix_r2)
+
+corr_matrix_r2 <- corr_matrix_r2 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("r"="value"))
+
+cor_matrix_p2 <- corr2$p
+cor_matrix_p2[is.na(cor_matrix_p2)] <- 1
+
+corr_matrix_p2 <- get_lower_tri(cor_matrix_p2)
+
+corr_matrix_p2 <- corr_matrix_p2 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("p"="value"))
+
+corr_matrix_rp2 <- corr_matrix_r2 %>%
+  inner_join(corr_matrix_p2, by =c("Var1", "Var2")) %>%
+  dplyr::filter(p < p.cutoff) %>%
+  inner_join(cluster, by="Var1") %>%
+  dplyr::filter(Var1 != Var2)
+
+corr_matrix_rp2$clusters2 <- cluster$Cluster[match(corr_matrix_rp2$Var2, cluster$Var1)]
+
+corr_matrix_rp2 <- corr_matrix_rp2 %>%
+  group_by(Cluster) %>%
+  count(clusters2) %>%
+  ungroup() %>%
+  drop_na()
+
+corr_matrix_m2 <- corr_matrix_rp2 %>%
+  mutate(percentage = n *100/sum(n)) %>%
+  dplyr::select(-n)
+  
+
+# ll <- unique(c(corr_matrix_m1$Var2_MetaboliteClass, corr_matrix_m1$Var3))
+ll <- unique(c(corr_matrix_m2$Cluster, corr_matrix_m2$clusters2))
+grid.col <- colorRampPalette(brewer.pal(3, "Dark2"))(length(ll))
+grid.col <- setNames(grid.col, ll)
+
+{
+  pdf(file = "results_metabolome_mm/cells/S1KO_cord_diagram.pdf", width = 4, height = 4)
+
+circos.clear()
+
+circos.par(track.margin = c(0, 0), start.degree = 90)
+
+chordDiagram(corr_matrix_m2,
+             grid.col = grid.col,
+             transparency = 0.2,
+             directional = -1,
+             direction.type = c("diffHeight"),
+             scale = TRUE,
+             diffHeight = -mm_h(2), 
+             link.sort = TRUE, 
+             self.link = 2,
+             link.decreasing = TRUE,
+             link.largest.ontop = TRUE, 
+             link.lwd = 0.25,    # Line width
+             link.lty = 1,    # Line type
+             link.border = 1,
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = 0.1),
+             big.gap = 10)
+
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(CELL_META$xcenter, 
+              ylim[1] + cm_h(2), 
+              sector.name, 
+              facing = "bending.outside",
+              niceFacing = TRUE, 
+              adj = c(0.5, 0.5),
+              cex = 1,
+              col=grid.col[sector.name],
+              font = 2)
+}, bg.border = NA)
+
+## total correlations 
+total_rp2 <- sum(corr_matrix_rp2$n)
+print(paste("total significantly enriched correlations = ", total_rp2))
+
+mytitle = "S1KO cells"
+mysubtitle = paste(total_rp2, "correlations")
+
+mtext(side=3, line=-1.75, adj=0.5, cex=1, font = 2, mytitle, outer = TRUE)
+mtext(side=3, line=-2.75, adj=0.5, cex=1, mysubtitle, outer = TRUE)
+dev.off()}
+
+## % change
+percent_change = (total_rp2*100)/(total_rp2+total_rp1)
+print(paste("changes in correlations = ", percent_change))
+
+## plot percluster enrichment
+colnames(corr_matrix_rp1) <- c("cluster1", "cluster2", "count")
+corr_matrix_rp1$group <- "WT"
+colnames(corr_matrix_rp2) <- c("cluster1", "cluster2", "count")
+corr_matrix_rp2$group <- "S1KO"
+
+p <- corr_matrix_rp1 %>% 
+  bind_rows(corr_matrix_rp2) %>%
+  filter(cluster1==cluster2)  %>%
+  group_by(cluster1) %>%
+  mutate(all_percentage = count * 100 / sum(count)) %>%
+  mutate(percentage = ifelse(group == "S1KO", all_percentage - all_percentage[group == "WT"], NA)) %>%
+  ungroup() %>%
+  ggplot(aes(x=cluster1,
+             y= count,
+             fill=relevel(factor(group), ref= "WT"))) +   
+  geom_bar(position = "dodge", stat="identity", color = "black") +
+  theme_bw() +
+  labs(x= "",
+       y="Number of metabolite correlations",
+       fill="") +
+  scale_fill_manual(values = c(c("#377EB8","#E41A1C"))) +
+  geom_text(aes(label = round(percentage, 1)),
+            nudge_y = 500) +
+  theme(legend.position = c(.9, .75)) 
+  
+print(p)
+
+ggsave("results_metabolome_mm/cells/correlation_boxplot.pdf",
+         plot = p, 
+         width = 6,
+         height = 6,
+         dpi = 300,
+         units = "cm")
+
+```
+
+## distribution plots
+```{r}
+distributionPlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## pie chart
+```{r}
+piePlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## metabolic alteration
+```{r}
+plotMetaboliteAlteration(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## volcano plots
+```{r}
+volcanoPlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+
+
+# supernatent
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/supernatent/expData_metabolon_untargeted_supernatent.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/supernatent/da_all_data_supernatent.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## boxplots
+```{r}
+boxPlots(dataList = expData,
+         data.type = "Metabolon",
+         species = "mmu",
+         group = "CELL_GENOTYPE",
+         path="results_metabolome_mm/supernatent")
+```
+
+## roc 
+```{r}
+rocPlots(dataList = expData,
+         data.type = "Metabolon",
+         species = "mmu",
+         group = "CELL_GENOTYPE",
+         var.imp = "S1KO",
+         path="results_metabolome_mm/supernatent") 
+```
+
+## plot heatmap
+```{r}
+t_value_cutoff <- 2
+## define cluster -----------------------------------------------------------
+cluster_size <- 3
+
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  mutate(across(everything(), as.character)) %>%
+  rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME"))
+
+## load imputed data matrix
+## ----------------------------------------------------------------
+imputed.data <- expData[["imputed.matrix"]]
+
+colnames(imputed.data) <- metabolite.class$MetaboliteName[match(colnames(imputed.data), metabolite.class$Metabolite)]
+
+#imputed.data <- imputed.data[, !grepl("^NA(\\.\\d+)?$", names(imputed.data))]
+#imputed.data <- imputed.data[, !is.na(colnames(imputed.data))]
+
+# load normalization reasults
+## ----------------------------------------------------------------
+normalization.results <- results %>%
+  filter(t.ratio <= -t_value_cutoff | t.ratio >= t_value_cutoff)
+
+## subset imputed data
+## ----------------------------------------------------------------
+imputed.data <- imputed.data[, colnames(imputed.data) %in% unique(normalization.results$Metabolite_Name)]
+rownames(imputed.data) <- expData[["metadata"]]$PARENT_SAMPLE_NAME
+
+## plot heatmap
+## ----------------------------------------------------------------
+heatmap_dat <- as.matrix(t(imputed.data))
+
+# basic heatmap 
+heatmap.px <- pheatmap(
+  heatmap_dat,
+  kmean_k = cluster_size,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  silent = TRUE
+)
+## annotation_rows 
+cluster <-
+  cbind(heatmap.px, cluster = cutree(heatmap.px$tree_row, k = cluster_size))
+cluster <- as.data.frame(unlist(cluster[, 2]))
+colnames(cluster) <- c("Cluster")
+cluster$Cluster <- sub("^", "Cluster", cluster$Cluster)
+cluster$Metabolite_Class <- metabolite.class$SUPER_PATHWAY[match(rownames(cluster), metabolite.class$MetaboliteName)]
+cluster$Metabolite_Subclass <- ifelse(grepl(
+                paste(c("^HCER", "^CER", "^SM"), collapse = "|"), 
+                      rownames(cluster)) & cluster$Metabolite_Class == "Complex lipids", 
+        "Sphingolipid", 
+        ifelse(
+            !grepl(
+                paste(c("^HCER", "^CER", "^SM"), collapse = "|"), 
+                      rownames(cluster)) & cluster$Metabolite_Class == "Complex lipids",
+                "Others lipids", 
+                "Others"
+            )
+        )
+
+## annotation_columns
+panel <- expData[["metadata"]] %>%
+  dplyr::select(PARENT_SAMPLE_NAME, CELL_GENOTYPE, GROUP_ID) %>%
+  column_to_rownames("PARENT_SAMPLE_NAME")
+
+## annotation row colors
+cluster.col <- brewer.pal(length(unique(cluster$Cluster)), "Set1")
+names(cluster.col) <- unique(cluster$Cluster)
+
+metab.class.col <- brewer.pal(length(unique(cluster$Metabolite_Class)), "RdYlGn")
+names(metab.class.col) <- unique(cluster$Metabolite_Class)
+
+metab.subclass.col <- brewer.pal(length(unique(cluster$Metabolite_Subclass)), "Dark2")
+names(metab.subclass.col) <- unique(cluster$Metabolite_Subclass)
+
+## annotation row colors
+sample.col <- c("#377EB8","#E41A1C")
+names(sample.col) <- unique(panel$CELL_GENOTYPE)
+
+clone.col <- c("#2166AC","#B2182B","#EF8A62","#FDDBC7")
+names(clone.col) <- unique(panel$GROUP_ID)
+
+combo.cols <-
+  list(
+    Cluster = cluster.col,
+    Metabolite_Class = metab.class.col,
+    Metabolite_Subclass = metab.subclass.col,
+    CELL_GENOTYPE = sample.col,
+    GROUP_ID = clone.col
+  )
+## plot heatmap
+heatmap.p <- pheatmap(
+  heatmap_dat,
+  color = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  cex = 1,
+  border_color = FALSE,
+  main = "Metabolites distribution",
+  display_numbers = FALSE,
+  cellwidth = 5,
+  cellheight = 0.4,
+  annotation_row = cluster,
+  annotation_col = panel,
+  annotation_colors = combo.cols,
+  cutree_rows = cluster_size
+)
+
+save_pheatmap_pdf(heatmap.p,
+                  "results_metabolome_mm/supernatent/heatmap_with_clusters_supernatent.pdf",
+                  width = 5,
+                  height= 8)
+
+print(heatmap.p)
+
+## save results
+saveRDS(cluster, paste(here(), 
+                "results_metabolome_mm/supernatent/identified_clusters.rds", sep = "/"))
+```
+
+## correlation plots
+```{r}
+cor_plot <- correlationPlot(dataList = expData,
+                            data.type = "Metabolon",
+                            species = "mmu",
+                            group = "CELL_GENOTYPE")
+```
+
+### plot
+```{r}
+#### WT
+
+corr1 <- cor_plot$results$WT
+
+cor_matrix_r1 <- corr1$r
+cor_matrix_r1[is.na(cor_matrix_r1)] <- 0
+corr_matrix_r1 <- get_lower_tri(cor_matrix_r1)
+
+corr_matrix_r1 <- corr_matrix_r1 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("r"="value"))
+
+cor_matrix_p1 <- corr1$p
+cor_matrix_p1[is.na(cor_matrix_p1)] <- 1
+
+corr_matrix_p1 <- get_lower_tri(cor_matrix_p1)
+
+corr_matrix_p1 <- corr_matrix_p1 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("p"="value"))
+
+cluster$Var1 <- rownames(cluster)
+
+corr_matrix_rp1 <- corr_matrix_r1 %>%
+  inner_join(corr_matrix_p1, by =c("Var1", "Var2")) %>%
+  dplyr::filter(p < p.cutoff) %>%
+  inner_join(cluster, by="Var1")
+
+corr_matrix_rp1$clusters2 <- cluster$Cluster[match(corr_matrix_rp1$Var2, cluster$Var1)]
+
+corr_matrix_rp1 <- corr_matrix_rp1 %>%
+  group_by(Cluster) %>%
+  count(clusters2) %>%
+  ungroup() %>%
+  drop_na()
+
+corr_matrix_m1 <- corr_matrix_rp1 %>%
+  mutate(percentage = n *100/sum(n)) %>%
+  dplyr::select(-n)
+
+# ll <- unique(c(corr_matrix_m1$Var2_MetaboliteClass, corr_matrix_m1$Var3))
+ll <- unique(c(corr_matrix_m1$Cluster, corr_matrix_m1$clusters2))
+grid.col <- colorRampPalette(brewer.pal(3, "Set1"))(length(ll))
+grid.col <- setNames(grid.col, ll)
+
+{ pdf(file = "results_metabolome_mm/supernatent/WT_cord_diagram_supernatent.pdf", width = 4, height = 4)
+circos.clear()
+
+circos.par(track.margin = c(0, 0), start.degree = 90)
+
+chordDiagram(corr_matrix_m1,
+             grid.col = grid.col,
+             transparency = 0.2,
+             directional = -1,
+             direction.type = c("diffHeight"),
+             scale = TRUE,
+             diffHeight = -mm_h(2), 
+             link.sort = TRUE, 
+             self.link = 2,
+             link.decreasing = TRUE,
+             link.largest.ontop = TRUE, 
+             link.lwd = 0.25,    # Line width
+             link.lty = 1,    # Line type
+             link.border = 1,
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = 0.1),
+             big.gap = 10)
+
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(CELL_META$xcenter, 
+              ylim[1] + cm_h(2), 
+              sector.name, 
+              facing = "bending.outside",
+              niceFacing = TRUE, 
+              adj = c(0.5, 0.5),
+              cex = 1,
+              col=grid.col[sector.name],
+              font = 2)
+}, bg.border = NA)
+
+## total correlations 
+total_rp1 <- sum(corr_matrix_rp1$n)
+print(paste("total significantly enriched correlations = ", total_rp1))
+
+mytitle = "WT cells"
+mysubtitle = paste(total_rp1, "correlations")
+
+mtext(side=3, line=-1.75, adj=0.5, cex=1, font = 2, mytitle, outer = TRUE)
+mtext(side=3, line=-2.75, adj=0.5, cex=1, mysubtitle, outer = TRUE)
+
+dev.off()
+}
+
+### SMPD1 KO
+
+corr2 <- cor_plot$results$S1KO
+
+cor_matrix_r2 <- corr2$r
+cor_matrix_r2[is.na(cor_matrix_r2)] <- 0
+corr_matrix_r2 <- get_lower_tri(cor_matrix_r2)
+
+corr_matrix_r2 <- corr_matrix_r2 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("r"="value"))
+
+cor_matrix_p2 <- corr2$p
+cor_matrix_p2[is.na(cor_matrix_p2)] <- 1
+
+corr_matrix_p2 <- get_lower_tri(cor_matrix_p2)
+
+corr_matrix_p2 <- corr_matrix_p2 %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  rename(c("p"="value"))
+
+corr_matrix_rp2 <- corr_matrix_r2 %>%
+  inner_join(corr_matrix_p2, by =c("Var1", "Var2")) %>%
+  dplyr::filter(p < p.cutoff) %>%
+  inner_join(cluster, by="Var1")
+
+corr_matrix_rp2$clusters2 <- cluster$Cluster[match(corr_matrix_rp2$Var2, cluster$Var1)]
+
+corr_matrix_rp2 <- corr_matrix_rp2 %>%
+  group_by(Cluster) %>%
+  count(clusters2) %>%
+  ungroup() %>%
+  drop_na()
+
+corr_matrix_m2 <- corr_matrix_rp2 %>%
+  mutate(percentage = n *100/sum(n)) %>%
+  dplyr::select(-n)
+  
+
+# ll <- unique(c(corr_matrix_m1$Var2_MetaboliteClass, corr_matrix_m1$Var3))
+ll <- unique(c(corr_matrix_m2$Cluster, corr_matrix_m2$clusters2))
+grid.col <- colorRampPalette(brewer.pal(3, "Set1"))(length(ll))
+grid.col <- setNames(grid.col, ll)
+
+{
+  pdf(file = "results_metabolome_mm/supernatent/S1KO_cord_diagram_supernatent.pdf", width = 4, height = 4)
+
+circos.clear()
+
+circos.par(track.margin = c(0, 0), start.degree = 90)
+
+chordDiagram(corr_matrix_m2,
+             grid.col = grid.col,
+             transparency = 0.2,
+             directional = -1,
+             direction.type = c("diffHeight"),
+             scale = TRUE,
+             diffHeight = -mm_h(2), 
+             link.sort = TRUE, 
+             self.link = 2,
+             link.decreasing = TRUE,
+             link.largest.ontop = TRUE, 
+             link.lwd = 0.25,    # Line width
+             link.lty = 1,    # Line type
+             link.border = 1,
+             annotationTrack = "grid",
+             preAllocateTracks = list(track.height = 0.1),
+             big.gap = 10)
+
+circos.trackPlotRegion(track.index = 1, panel.fun = function(x, y) {
+  xlim = get.cell.meta.data("xlim")
+  ylim = get.cell.meta.data("ylim")
+  sector.name = get.cell.meta.data("sector.index")
+  circos.text(CELL_META$xcenter, 
+              ylim[1] + cm_h(2), 
+              sector.name, 
+              facing = "bending.outside",
+              niceFacing = TRUE, 
+              adj = c(0.5, 0.5),
+              cex = 1,
+              col=grid.col[sector.name],
+              font = 2)
+}, bg.border = NA)
+
+## total correlations 
+total_rp2 <- sum(corr_matrix_rp2$n)
+print(paste("total significantly enriched correlations = ", total_rp2))
+
+mytitle = "S1KO cells"
+mysubtitle = paste(total_rp2, "correlations")
+
+mtext(side=3, line=-1.75, adj=0.5, cex=1, font = 2, mytitle, outer = TRUE)
+mtext(side=3, line=-2.75, adj=0.5, cex=1, mysubtitle, outer = TRUE)
+dev.off()}
+
+## % change
+percent_change = (total_rp2*100)/(total_rp2+total_rp1)
+print(paste("changes in correlations = ", percent_change))
+
+## plot percluster enrichment
+colnames(corr_matrix_rp1) <- c("cluster1", "cluster2", "count")
+corr_matrix_rp1$group <- "WT"
+colnames(corr_matrix_rp2) <- c("cluster1", "cluster2", "count")
+corr_matrix_rp2$group <- "S1KO"
+
+p <- corr_matrix_rp1 %>% 
+  bind_rows(corr_matrix_rp2) %>%
+  filter(cluster1==cluster2)  %>%
+  group_by(cluster1) %>%
+  mutate(percentage = ifelse(group == "S1KO", count * 100 / sum(count), NA)) %>%
+  ungroup() %>%
+  ggplot(aes(x=cluster1,
+             y= count,
+             fill=relevel(factor(group), ref= "WT"))) +   
+  geom_bar(position = "dodge", stat="identity", color = "black") +
+  theme_bw() +
+  labs(x= "",
+       y="Number of metabolite correlations",
+       fill="") +
+  scale_fill_manual(values = c(c("#377EB8","#E41A1C"))) +
+  geom_text(aes(label = round(percentage, 1)),
+            nudge_y = 500) +
+  theme(legend.position = c(.9, .75))
+  
+print(p)
+
+ggsave("results_metabolome_mm/supernatent/correlation_boxplots_supernatent.pdf",
+         plot = p, 
+         width = 8,
+         height = 8,
+         dpi = 300,
+         units = "cm")
+
+```
+
+## distribution plots
+```{r}
+distributionPlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## pie chart
+```{r}
+piePlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## metabolic alteration
+```{r}
+plotMetaboliteAlteration(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 cutoff = 0.01,
+                 lipid.class = TRUE,
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+## volcano plots
+```{r}
+volcanoPlot(data = results,
+                 path = NULL,
+                 species = "mmu",
+                 data.type = "Metabolon",
+                 save = "none",
+                 fig.width = 12,
+                 fig.height = 9,
+                 dpi = 300,
+                 Other_metadata = NULL)
+```
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

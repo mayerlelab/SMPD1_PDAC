@@ -1,0 +1,241 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome DE (Smpd1 ko)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "DESeq2",
+  "RColorBrewer",
+  "topconfects"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/installScriptLibs.R")
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/banner.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_Smpd1_ko")),
+       dir.create(file.path(paste0(here()), "results_mouse_Smpd1_ko")), FALSE)
+```
+
+## load data
+
+```{r}
+se <- readRDS("results_mouse_Smpd1_ko/summarizedExperiemnts_kpc1050.rds")
+se
+```
+
+## Phenotypes
+
+```{r}
+data <- assays(se)$counts
+data <- log2(data + 1)
+
+data <- data %>%
+  as.data.frame() %>%
+  rownames_to_column("symbol") %>%
+  pivot_longer(-symbol, names_to = "sample", values_to = "log2 (counts +1)")
+
+p1 <- ggplot(data, aes(x = `log2 (counts +1)`, color=sample)) +
+  geom_density(alpha =  0.8,
+               show.legend = FALSE) +
+  theme_bw() +
+  ggtitle(label = "Count",
+          subtitle = paste(length(unique(data$symbol)), "genes x", length(unique(data$sample)), "samples")) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(6, "Set1"))(length(unique(data$sample))))
+
+print(p1)
+
+p2 <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Sample") %>%
+  dplyr::select(Sample, CellLine, Condition, Clone, BatchRun, Replicate, p53Status) %>%
+  pivot_longer(-Sample, names_to = "variable", values_to = "values") %>%
+  group_by(variable) %>%
+  dplyr::count(values) %>%
+  ungroup() %>%
+  ggplot(aes(x = n, y = variable, fill = values)) +
+  geom_bar(stat = "identity", position = "stack", color="black", alpha=0.75, show.legend = FALSE) +
+  geom_text(aes(label = values), position = position_stack(vjust = .5)) +
+  labs(x = "", y = "") +
+  theme_void() +
+  theme(axis.text.y = element_text(size=10, face= "bold")) +
+  ggtitle(label = "Phenotypes")
+
+print(p2)
+```
+
+## construct DEseq object
+
+```{r}
+se$design <- factor(paste0(se$CellLine, se$Condition))
+se$BiologicalRep <- factor(se$BiologicalRep)
+se$Clone <- factor(se$Clone)
+## create DEseq object
+dds <- DESeqDataSet(se, design = ~ design)
+# Filter lowly expressed genes
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+# Remove ribosomal and mitochondrial genes from the analysis
+remove <- grep("^Rps|^Rpl|^Mrps|^Mrpl|^Mt-", rownames(dds))
+dds <- dds[-remove,]
+## normalize matrix
+dds <- estimateSizeFactors(dds)
+## perform DE
+dds <- DESeq(dds, parallel = TRUE)
+## plot dispersion
+plotDispEsts(dds)
+## calculate variance stabilizing transformation 
+vst <-  varianceStabilizingTransformation(dds, blind = FALSE)
+## correct for batch effect
+design2 <- model.matrix(~design, data = colData(se))
+assay(vst) <- limma::removeBatchEffect(assay(vst),batch = vst$BatchRun,
+                                       design = design2)
+## create corrected matrix
+corrected_mat <- assay(vst)
+coefs <- attr(DESeq2::dispersionFunction(dds), "coefficients")
+x <- corrected_mat * log(2)
+x <- exp(1)^x * (4 * coefs["asymptDisp"])
+x <- (x - (1 + coefs["extraPois"]))/2
+corrected_mat <- x^2 / (coefs["asymptDisp"] * (coefs["extraPois"] + 2 * x + 1))
+## create uncorrected matrix
+uncorrected_mat <- assay(se)
+## plot correlation
+uncorrelated_mat <- cor(uncorrected_mat)
+## heatmap
+pheatmap::pheatmap(uncorrelated_mat,
+                   col = colorRampPalette(rev(brewer.pal(256,"RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   border_color = NA,
+                   main = "batch uncorrected samples")
+## plot correlation
+correlated_mat <- cor(corrected_mat)
+## heatmap
+pheatmap::pheatmap(correlated_mat,
+                   col = colorRampPalette(rev(brewer.pal(256,"RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   border_color = NA,
+                   main = "batch corrected samples")
+
+
+if (!file.exists("results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")) {
+  
+  confect_list <- list()
+  
+  for (cl in unique(se$CellLine)) {
+    
+    temp <- colData(se)[colData(se)$CellLine %in% cl,]
+    comb <- combn(sort(unique(temp$Condition)),2)
+    
+    for (cb in 1:ncol(comb)) {
+      
+      uniq_comb <- as.vector(comb[,cb])
+      
+      contrast <- c("design", paste0(cl,uniq_comb[1]), paste0(cl,uniq_comb[2]))
+      
+      banner(paste(cl,"=",uniq_comb[1],"vs",uniq_comb[2]))
+      
+      de_result <- results(dds, 
+                           contrast = contrast, 
+                           independentFiltering = FALSE, 
+                           alpha = 0.01,
+                           pAdjustMethod = "BH", 
+                           parallel = TRUE, 
+                           cooksCutoff = Inf)
+      
+      confects <- topconfects::deseq2_confects(dds, 
+                                               contrast = contrast,
+                                               step = 0.01,
+                                               independentFiltering = TRUE, 
+                                               alpha = 0.01,
+                                               pAdjustMethod = "BH",
+                                               parallel = TRUE, 
+                                               cooksCutoff = Inf)
+      
+      de_result <- lfcShrink(dds, 
+                             contrast = contrast, 
+                             res = de_result,
+                             coef = 2, 
+                             type = "ashr")
+      
+      
+      de_result <- as.data.frame(de_result) %>%
+        rownames_to_column("Symbol")
+      
+      confect_df <- confects$table %>%
+        as.data.frame() %>%
+        rename("name"="Symbol")%>%
+        dplyr::select(-baseMean) %>%
+        full_join(de_result, by ="Symbol") 
+      
+      aa <- confect_df %>%
+        mutate(confidence = case_when(
+          padj >= 0.01 ~ "not significant",
+          padj < 0.01 & confect >= 0.5 ~ "> 0.5",
+          padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5",
+          padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+          padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0",
+          padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1",
+          padj < 0.01 & confect <= -0.5 ~ "< -0.5",
+          TRUE ~ NA_character_))
+      
+      contrast_name <- paste(cl,uniq_comb[1], "vs", uniq_comb[2], sep = "_")
+      
+      confect_list[[contrast_name]] <- confect_df
+      
+    }
+  }
+  
+  ## save DE mat
+  saveRDS(confect_list, "results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")
+  
+} else {
+  
+  confect_list <- readRDS("results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")
+}
+```
+
+## save matrix
+
+```{r}
+saveRDS(corrected_mat, "results_mouse_Smpd1_ko/corrected_matrix_kpc1050.rds")
+saveRDS(uncorrected_mat, "results_mouse_Smpd1_ko/uncorrected_mat_kpc1050.rds")
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

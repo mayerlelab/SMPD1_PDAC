@@ -1,0 +1,230 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (normalization)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+```
+
+# cells
+
+## load data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds", sep = "/"))
+colnames(expData[["metadata"]]) <- sub("PARAM_BRADFORD_MG/ML", "PARAM_BRADFORD_MG_ML", colnames(expData[["metadata"]]))
+```
+
+## QC
+
+### levene's stat
+```{r}
+levene_stat <- leveneStat(group = "CELL_GENOTYPE",
+                          dataList = expData,
+                          location = "median",
+                          trim.alpha = 0.25,
+                          bootstrap = TRUE,
+                          num.bootstrap = 1000,
+                          kruskal.test = TRUE)
+
+data("chemicalMetadata")
+
+levene_stat$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(levene_stat$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+head(levene_stat)
+
+write.csv(levene_stat, paste(here(),"Sphingolipids/results_metabolome_mm/cells/levene_stat_cells.csv", sep = "/"))
+```
+
+### Sharipo's test
+```{r}
+shapiro_test <- metapacR::shapiroTest(dataList = expData)
+
+shapiro_test$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(shapiro_test$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+head(shapiro_test)
+
+write.csv(shapiro_test, paste(here(),"Sphingolipids/results_metabolome_mm/cells/shapiro_test_cells.csv", sep = "/"))
+```
+
+## diamentionality reduction
+
+```{r}
+diam_reduction <- compareDiamReduction(dataList = expData,
+                                                 plotting.variable = "CELL_GENOTYPE",
+                                                 crossvalI = 3)
+
+print(diam_reduction$plot)
+
+saveRDS(diam_reduction, paste(here(), 
+                "Sphingolipids/results_metabolome_mm/cells/diam_reduction_cells.rds", sep = "/"))
+
+## plotting best possible diam reduction
+
+p <- plotDiamReduction(dataList = expData,
+                            results = diam_reduction,
+                            diam.method = "opls",
+                            grouping.variables = "CELL_GENOTYPE",
+                            dist.variables = NULL)
+
+print(p$group.plot)
+
+ggsave(paste(here(), 
+                "Sphingolipids/results_metabolome_mm/cells/diam_reduction_cells_opls.pdf", sep = "/"),
+       plot = p$group.plot,
+       width = 6,
+       height = 4)
+```
+
+## differential abundance
+```{r}
+da_all <- metapacR::normalizeDat(dataList = expData,
+                           confounders = c("PARAM_BRADFORD_MG_ML"),
+                           stratifier = "CELL_GENOTYPE",
+                           reference = "S1KO",
+                           fix.effect = NULL,
+                           random.effect = NULL)
+
+da_all$summaryFC$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(da_all$summaryFC$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+saveRDS(da_all, paste(here(), 
+                "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+
+## export results
+metapacR::exportResults(da_all$summaryFC, path = paste0(here(), 
+                "results_metabolome_mm/cells"), filename = "da_all_cells")
+```
+
+
+
+# supernatent
+
+## load data
+```{r}
+expData <- readRDS(paste(here(),"Sphingolipids/results_metabolome_mm/supernatent/expData_metabolon_untargeted_supernatent.rds", sep ="/"))
+```
+
+## QC
+
+### levene's stat
+```{r}
+levene_stat <- leveneStat(group = "CELL_GENOTYPE",
+                          dataList = expData,
+                          location = "mean",
+                          trim.alpha = 0.05,
+                          bootstrap = TRUE,
+                          num.bootstrap = 1000,
+                          kruskal.test = TRUE)
+
+data("chemicalMetadata")
+
+levene_stat$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(levene_stat$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+head(levene_stat)
+
+write.csv(levene_stat, paste(here(),"Sphingolipids/results_metabolome_mm/supernatent/levene_stat_supernatent.csv", sep = "/"))
+```
+
+### Sharipo's test
+```{r}
+shapiro_test <- metapacR::shapiroTest(dataList = expData)
+
+shapiro_test$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(shapiro_test$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+head(shapiro_test)
+
+write.csv(shapiro_test, paste(here(),"Sphingolipids/results_metabolome_mm/supernatent/shapiro_test_supernatent.csv", sep = "/"))
+```
+
+## diamentionality reduction
+
+```{r}
+diam_reduction <- compareDiamReduction(dataList = expData,
+                                                 plotting.variable = "CELL_GENOTYPE",
+                                                 crossvalI = 1)
+
+print(diam_reduction$plot)
+
+saveRDS(diam_reduction, paste(here(), 
+                "Sphingolipids/results_metabolome_mm/supernatent/diam_reduction_supernatent.rds", sep = "/"))
+
+## plotting best possible diam reduction
+
+p <- plotDiamReduction(dataList = expData,
+                            results = diam_reduction,
+                            diam.method = "opls",
+                            grouping.variables = "CELL_GENOTYPE",
+                            dist.variables = NULL)
+
+print(p$group.plot)
+```
+
+## differential abundance
+```{r}
+da_all <- metapacR::normalizeDat(dataList = expData,
+                           confounders = NULL,
+                           stratifier = "CELL_GENOTYPE",
+                           reference = "S1KO",
+                           fix.effect = NULL,
+                           random.effect = NULL)
+
+da_all$summaryFC$Metabolite_Name <- chemicalMetadata$CHEMICAL_NAME[match(da_all$summaryFC$Metabolite, chemicalMetadata$MET_CHEM_NO)]
+
+saveRDS(da_all, paste(here(), 
+                "Sphingolipids/results_metabolome_mm/supernatent/da_all_data_supernatent.rds", sep = "/"))
+
+## export results
+metapacR::exportResults(da_all$summaryFC, path = paste0(here(), 
+                "/Sphingolipids/results_metabolome_mm/supernatent"), filename = "da_all_supernatent")
+```
+
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

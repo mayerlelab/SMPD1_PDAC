@@ -1,0 +1,139 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (lipid specific analysis)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+```
+
+# cells
+
+## load data
+```{r}
+results <- readRDS(paste(here(), "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## Lipid chain length correlation
+```{r}
+lipidChainLengthCorrelation(
+  results = results,
+  species = "mmu",
+  path = "results_metabolome_mm/cells",
+  save = "none",
+  data.type = "Metabolon",
+  fig.width = 12,
+  fig.height = 9,
+  dpi = 300,
+  Other_metadata = NULL
+)
+```
+
+## Lipid chain length distribution
+```{r}
+lipidChainLengthDistribution(
+  results = results,
+  p.value.cutoff = 0.05,
+  fold.changes.cutoff = 1.5,
+  species = "mmu",
+  path = "results_metabolome_mm/cells",
+  save = "none",
+  data.type = "Metabolon",
+  fig.width = 12,
+  fig.height = 9,
+  dpi = 300,
+  Other_metadata = NULL
+)
+```
+
+
+# supernatent
+
+## load data
+```{r}
+results <- readRDS(paste(here(), "Sphingolipids/results_metabolome_mm/cells/da_all_data_supernatent.rds", sep = "/"))
+results <- results$summaryFC
+```
+
+## Lipid chain length correlation
+```{r}
+lipidChainLengthCorrelation(
+  results = results,
+  species = "mmu",
+  path = "results_metabolome_mm/supernatent",
+  save = "none",
+  data.type = "Metabolon",
+  fig.width = 12,
+  fig.height = 9,
+  dpi = 300,
+  Other_metadata = NULL
+)
+```
+
+## Lipid chain length distribution
+```{r}
+lipidChainLengthDistribution(
+  results = results,
+  p.value.cutoff = 0.05,
+  fold.changes.cutoff = 1.5,
+  species = "mmu",
+  path = "results_metabolome_mm/supernatent",
+  save = "none",
+  data.type = "Metabolon",
+  fig.width = 12,
+  fig.height = 9,
+  dpi = 300,
+  Other_metadata = NULL
+)
+```
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

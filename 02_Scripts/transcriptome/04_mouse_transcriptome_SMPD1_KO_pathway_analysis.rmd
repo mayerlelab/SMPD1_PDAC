@@ -1,0 +1,1276 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome DE (Smpd1 ko)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "DESeq2",
+  "ggplot2",
+  "ggrepel",
+  "RColorBrewer",
+  "DT",
+  "pheatmap",
+  "limma", 
+  "tidyverse",
+  "here",
+  "ggpubr",
+  "sjPlot",
+  "Biobase",
+  "clusterProfiler",
+  "org.Hs.eg.db",
+  "vroom",
+  "msigdbr",
+  "DOSE",
+  "ReactomePA",
+  "GOstats",
+  "genefilter",
+  "topGO",
+  "fgsea",
+  "GOplot",
+  "gprofiler2",
+  "igraph",
+  "intergraph",
+  "GGally",
+  "tm",
+  "wordcloud",
+  "piano",
+  "biomaRt"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_Smpd1_ko")),
+       dir.create(file.path(paste0(here()), "results_mouse_Smpd1_ko")), FALSE)
+```
+
+# Gene ontology functions
+
+```{r topgo}
+##----------------------------------------------------------------
+##                       topGo functions                       --
+##----------------------------------------------------------------
+myTopGoBP <- function(foreG, res) {
+  
+  foreG <- na.omit(foreG)
+  res <- res %>%
+    drop_na(EnsemblID)
+  ## row names to entrez
+  overallBaseMean <- as.matrix(res[, "baseMean", drop = F])
+  sig_idx <- match(foreG, res$EnsemblID)
+  backG <- c()
+  for(i in sig_idx){
+    ind <- genefinder(overallBaseMean, i, 10, method = "manhattan")[[1]]$indices
+    backG <- c(backG, ind)
+    
+  }
+  backG <- unique(backG)
+  backG <- res$EnsemblID[backG]
+  
+  backG <- setdiff(backG,  foreG)
+  
+  geneIDs <- res$EnsemblID
+  inUniverse <- geneIDs %in% c(foreG,  backG) 
+  inSelection <-  geneIDs %in% foreG
+  alg <- factor( as.integer(inSelection[inUniverse]))
+  #alg <- factor( as.integer( inSelection ) )
+  names(alg) <- geneIDs[inUniverse]
+  #names(alg) <- geneIDs
+  
+  tgd <- new( "topGOdata", ontology="BP", allGenes = alg, nodeSize=5,
+              annot=annFUN.org, mapping="org.Mm.eg.db", ID = "ensembl" )
+  
+  ## run tests
+  resultTopGO.elim <- runTest(tgd, algorithm = "elim", statistic = "Fisher" )
+  resultTopGO.classic <- runTest(tgd, algorithm = "classic", statistic = "Fisher" )
+  
+  ## look at results
+  bp <- GenTable( tgd, Fisher.elim = resultTopGO.elim, 
+                  Fisher.classic = resultTopGO.classic,
+                  orderBy = "Fisher.classic" , topNodes = 100)
+  return(bp)
+  
+}
+
+myTopGoMF <- function(foreG, res) {
+  foreG <- na.omit(foreG)
+  res <- res %>%
+    drop_na(EnsemblID)
+  overallBaseMean <- as.matrix(res[, "baseMean", drop = F])
+  sig_idx <- match(foreG, res$EnsemblID)
+  backG <- c()
+  for(i in sig_idx){
+    ind <- genefinder(overallBaseMean, i, 10, method = "manhattan")[[1]]$indices
+    backG <- c(backG, ind)
+    
+  }
+  backG <- unique(backG)
+  backG <- res$EnsemblID[backG]
+  
+  backG <- setdiff(backG,  foreG)
+  
+  geneIDs = res$EnsemblID
+  inUniverse = geneIDs %in% c(foreG,  backG) 
+  inSelection =  geneIDs %in% foreG
+  alg <- factor( as.integer(inSelection[inUniverse]))
+  #alg <- factor( as.integer( inSelection ) )
+  names(alg) <- geneIDs[inUniverse]
+  #names(alg) <- geneIDs
+  
+  
+  tgd <- new( "topGOdata", ontology="MF", allGenes = alg, nodeSize=5,
+              annot=annFUN.org, mapping="org.Mm.eg.db", ID = "ensembl" )
+  
+  ## run tests
+  resultTopGO.elim <- runTest(tgd, algorithm = "elim", statistic = "Fisher" )
+  resultTopGO.classic <- runTest(tgd, algorithm = "classic", statistic = "Fisher" )
+  
+  ## look at results
+  mf <- GenTable( tgd, Fisher.elim = resultTopGO.elim, 
+                  Fisher.classic = resultTopGO.classic,
+                  orderBy = "Fisher.classic" , topNodes = 100)
+  return(mf)
+}
+
+myTopGoCC <- function(foreG, res) {
+  foreG <- na.omit(foreG)
+    res <- res %>%
+    drop_na(EnsemblID)
+  overallBaseMean <- as.matrix(res[, "baseMean", drop = F])
+  sig_idx <- match(foreG, res$EnsemblID)
+  backG <- c()
+  for(i in sig_idx){
+    ind <- genefinder(overallBaseMean, i, 10, method = "manhattan")[[1]]$indices
+    backG <- c(backG, ind)
+    
+  }
+  backG <- unique(backG)
+  backG <- res$EnsemblID[backG]
+  
+  backG <- setdiff(backG,  foreG)
+  
+  geneIDs = res$EnsemblID
+  inUniverse = geneIDs %in% c(foreG,  backG) 
+  inSelection =  geneIDs %in% foreG
+  alg <- factor(as.integer(inSelection[inUniverse]))
+  #alg <- factor( as.integer( inSelection ) )
+  names(alg) <- geneIDs[inUniverse]
+  #names(alg) <- geneIDs
+  
+  tgd <- new( "topGOdata", ontology="CC", allGenes = alg, nodeSize=5,
+              annot=annFUN.org, mapping="org.Mm.eg.db", ID = "ensembl" )
+  
+  ## run tests
+  resultTopGO.elim <- runTest(tgd, algorithm = "elim", statistic = "Fisher" )
+  resultTopGO.classic <- runTest(tgd, algorithm = "classic", statistic = "Fisher" )
+  
+  ## look at results
+  cc <- GenTable( tgd, Fisher.elim = resultTopGO.elim, 
+                  Fisher.classic = resultTopGO.classic,
+                  orderBy = "Fisher.classic" , topNodes = 100)
+  return(cc)
+}
+
+##----------------------------------------------------------------
+##                     keggStats functions                     --
+##----------------------------------------------------------------
+keggStats <- function(foreground, background) {
+  hgCutoff <- 0.01
+  entrezUniverse <- na.omit(background)
+  selectedEntrezIds <- na.omit(foreground)
+  params <- new(
+    "KEGGHyperGParams",
+    geneIds = selectedEntrezIds,
+    universeGeneIds = entrezUniverse,
+    annotation = "org.Mm.eg.db",
+    pvalueCutoff = hgCutoff,
+    testDirection = "over"
+  )
+  hyperGTest(params)
+}
+
+##----------------------------------------------------------------
+##                 network annotation function                 --
+##----------------------------------------------------------------
+## ref: https://github.com/tfkillian/GSEA_network_analysis/blob/master/GSEA_network_analysis.Rmd
+t.rW <-
+  c(
+    "cell",
+    "process",
+    "regulation",
+    "negative",
+    "positive",
+    "signaling",
+    "response",
+    "stimulus",
+    "signal",
+    "activity",
+    "protein",
+    "involved",
+    "component",
+    "level",
+    "effector",
+    "event",
+    "projection",
+    "organismal",
+    "cellular",
+    "modification",
+    "pathway",
+    "mediated",
+    "dependent",
+    "organization",
+    "group",
+    "target",
+    "biocarta",
+    "kegg",
+    "reactome"
+  )
+clust_head <- function(x){
+  txt <- unlist(strsplit(x, "_"))
+  txt <- Corpus(VectorSource(txt))
+  txt <- tm_map(txt, PlainTextDocument)
+  txt <- tm_map(txt, removePunctuation)
+  txt <- tm_map(txt, removeNumbers)
+  txt <- tm_map(txt, content_transformer(tolower))
+  txt <- tm_map(txt, removeWords, c(t.rW, stopwords("english")))
+  tdm <- TermDocumentMatrix(txt)
+  m <- as.matrix(tdm)
+  word_freqs <- sort(rowSums(m), decreasing=TRUE)
+  word_freqs <- word_freqs[word_freqs>1]
+  word_freqs <- paste(names(word_freqs)[1:4], collapse=" ")
+  gsub("[[:space:]]?NA[[:space:]]?", "", word_freqs)
+}
+```
+
+# gsea repositories
+
+```{r}
+load(url("http://bioinf.wehi.edu.au/software/MSigDB/mouse_H_v5p2.rdata"))
+load(url("http://bioinf.wehi.edu.au/software/MSigDB/mouse_c5_v5p2.rdata"))
+load(url("http://bioinf.wehi.edu.au/software/MSigDB/mouse_c2_v5p2.rdata"))
+load(url("http://bioinf.wehi.edu.au/software/MSigDB/mouse_c6_v5p2.rdata"))
+
+gset <- c(Mm.c2, Mm.c5, Mm.H)
+gs.libs <- sapply(names(gset), function(x) strsplit(x, "_")[[1]][1])
+gset <- gset[which(gs.libs %in% c("KEGG", "REACTOME", "BIOCARTA", "GO", "HALLMARK"))]
+```
+
+# Pathway analysis for KO cells
+
+## load data
+
+```{r}
+confect_list <- readRDS("results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")
+gene_list <- readRDS("results_mouse_Smpd1_ko/consensus_gene_list.rds")
+```
+
+## enrichment analysis
+
+### gProfiler
+
+```{r}
+filtered_list <- confect_list[names(confect_list)[grepl("_KO_vs_WT", names(confect_list))]]
+
+## bioMart
+ensembl <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+
+
+for (l in names(filtered_list)) {
+  
+  banner(l)
+  
+  df <- filtered_list[[l]] %>%
+    mutate(confidence = case_when(padj >= 0.01 ~ "not significant", 
+                                  padj < 0.01 & confect >= 0.5 ~ "> 0.5", 
+                                  padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5", 
+                                  padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1", 
+                                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", 
+                                  padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", 
+                                  padj < 0.01 & confect <= -0.5 ~ "< -0.5", TRUE ~ NA_character_)) %>%
+    filter(confidence != "not significant")
+  
+  bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = df$Symbol, mart = ensembl)
+  
+  df$EnsemblID <- bm$ensembl_gene_id[match(df$Symbol, bm$external_gene_name)]
+  
+  banner("g:Profiler: Upregulated processes", "*")
+  
+  up.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    pull(EnsemblID)
+  
+  # gost query
+  gostres <- gost(query = up.ens, 
+                  organism = "mmusculus", 
+                  significant = TRUE,
+                  correction_method = "fdr", 
+                  sources = c("GO", "KEGG", "REAC", "WP"), 
+                  evcodes = TRUE,
+                  user_threshold = 0.01)
+  
+  ## gost results
+  pathway_gostres <- gostres$result
+  
+  if (is.null(nrow(pathway_gostres))) {
+    next
+  } else {
+  
+  ## save gem files
+  gem <- pathway_gostres[, c("term_id", "term_name", "p_value", "intersection")]
+  colnames(gem) <- c("GO.ID", "Description", "p.Val", "Genes")
+  gem$FDR <- gem$p.Val
+  gem$Phenotype = "+1"
+  gem <- gem[, c("GO.ID", "Description", "p.Val", "FDR", "Phenotype", "Genes")]
+  
+  write.table(gem, 
+              file = paste0("results_mouse_Smpd1_ko/", l, "_upregulated_gProfiler_gem.txt"),
+              sep = "\t", 
+              quote = F, 
+              row.names = F)
+  
+  ## select only singificant pathways
+  pathway_gostres <- as.data.frame(pathway_gostres[which(pathway_gostres$significant == TRUE), ])
+  
+  
+  # annotate query size
+  pathway_gostres$original_query_size <- rep(length(up.ens), nrow(pathway_gostres))
+  
+  # Generate non-interactive pathway dotplots in the folder
+  pg <- gostplot(gostres, 
+                 capped = TRUE, 
+                 interactive = FALSE) + 
+    ggtitle(l) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text = element_text(size = 12), 
+          axis.title = element_text(face = "bold",size = 12)) + 
+    xlab("") + 
+    theme(axis.text.x = element_text(angle = 90,
+                  hjust = 1, vjust = 0.5))
+  
+  ## print
+  print(pg)
+  
+  ## split data set
+  res <- split(pathway_gostres, pathway_gostres$source)
+                
+  for (df.list in res) {
+    
+    db_source <- df.list$source[1]
+    
+    df.list$short_name <- sapply(df.list$term_name, substr, start = 1, stop = 50)
+    
+    df.list_subset <- data.frame(Pathway_name = df.list$short_name, 
+                                 Pathway_code = df.list$term_id,
+                                 DE_genes = df.list$intersection_size, 
+                                 Pathway_size = df.list$term_size,
+                                 Fraction_DE = (df.list$intersection_size/df.list$term_size), 
+                                 Padj = df.list$p_value)
+    
+    # Enriched pathways horizontal barplots of padj values
+    p <- df.list_subset %>%
+      mutate(Pathway_name = str_wrap(Pathway_name, width = 20)) %>%
+      ggplot(aes(x = reorder(Pathway_name, Fraction_DE), y = Fraction_DE)) +
+      geom_bar(aes(fill = -log10(Padj)), stat = "identity", width = 0.7, color = "black") +
+      geom_text(aes(label = paste0(df.list_subset$DE_genes, "/", df.list_subset$Pathway_size)),
+                vjust = 0.4, hjust = -0.5, size = 3) + 
+      coord_flip() + 
+      scale_y_continuous(limits = c(0,1)) + 
+      scale_fill_gradientn(
+        colours = rev(RColorBrewer::brewer.pal(10, "RdBu")),
+        #limits = c(0, 3),
+        oob = scales::squish,
+        name = "log10\n(adj. P value)"
+      ) +
+      guides(fill = guide_colourbar(
+        barwidth = unit(0.3, "cm"),
+        ticks.colour = "black",
+        frame.colour = "black"
+      )) +
+      ggtitle(paste("Enriched pathways:\n", l, "=", db_source)) + 
+      xlab("") + 
+      ylab("Gene fraction (DE genes / Pathway size)") +
+      theme_bw() + 
+      theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "right", 
+          axis.text = element_text(size = 12), 
+          axis.title = element_text(face = "bold",size = 12))
+      
+    ## print
+    print(p)
+    
+  }
+  }
+  
+  banner("g:Profiler: Downregulated processes", "*")
+  
+  down.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    pull(EnsemblID)
+  
+  # gost query
+  gostres <- gost(query = down.ens, 
+                  organism = "mmusculus", 
+                  significant = TRUE,
+                  correction_method = "fdr", 
+                  sources = c("GO", "KEGG", "REAC", "WP"), 
+                  evcodes = TRUE,
+                  user_threshold = 0.01)
+  
+  ## gost results
+  pathway_gostres <- gostres$result
+  
+  if (is.null(nrow(pathway_gostres))) {
+    next
+  } else {
+  
+  ## save gem files
+  gem <- pathway_gostres[, c("term_id", "term_name", "p_value", "intersection")]
+  colnames(gem) <- c("GO.ID", "Description", "p.Val", "Genes")
+  gem$FDR <- gem$p.Val
+  gem$Phenotype = "+1"
+  gem <- gem[, c("GO.ID", "Description", "p.Val", "FDR", "Phenotype", "Genes")]
+  
+  write.table(gem, 
+              file = paste0("results_mouse_Smpd1_ko/", l, "_downregulated_gProfiler_gem.txt"),
+              sep = "\t", 
+              quote = F, 
+              row.names = F)
+  
+  ## select only singificant pathways
+  pathway_gostres <- as.data.frame(pathway_gostres[which(pathway_gostres$significant == TRUE), ])
+  
+  # annotate query size
+  pathway_gostres$original_query_size <- rep(length(down.ens), nrow(pathway_gostres))
+  
+  # Generate non-interactive pathway dotplots in the folder
+  pg <- gostplot(gostres, 
+                 capped = TRUE, 
+                 interactive = FALSE) + 
+    ggtitle(l) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text = element_text(size = 12), 
+          axis.title = element_text(face = "bold",size = 12)) + 
+    xlab("") + 
+    theme(axis.text.x = element_text(angle = 90,
+                  hjust = 1, vjust = 0.5))
+  
+  ## print
+  print(pg)
+  
+  ## split data set
+  res <- split(pathway_gostres, pathway_gostres$source)
+                
+  for (df.list in res) {
+    
+    db_source <- df.list$source[1]
+    
+    df.list$short_name <- sapply(df.list$term_name, substr, start = 1, stop = 50)
+    
+    df.list_subset <- data.frame(Pathway_name = df.list$short_name, 
+                                 Pathway_code = df.list$term_id,
+                                 DE_genes = df.list$intersection_size, 
+                                 Pathway_size = df.list$term_size,
+                                 Fraction_DE = (df.list$intersection_size/df.list$term_size), 
+                                 Padj = df.list$p_value)
+    
+    # Enriched pathways horizontal barplots of padj values
+    p <- df.list_subset %>%
+      mutate(Pathway_name = str_wrap(Pathway_name, width = 20)) %>%
+      ggplot(aes(x = reorder(Pathway_name, Fraction_DE), y = Fraction_DE)) +
+      geom_bar(aes(fill = -log10(Padj)), stat = "identity", width = 0.7, color = "black") +
+      geom_text(aes(label = paste0(df.list_subset$DE_genes, "/", df.list_subset$Pathway_size)),
+                vjust = 0.4, hjust = -0.5, size = 3) + 
+      coord_flip() + 
+      scale_y_continuous(limits = c(0,1)) + 
+      scale_fill_gradientn(
+        colours = rev(RColorBrewer::brewer.pal(10, "RdBu")),
+        #limits = c(0, 3),
+        oob = scales::squish,
+        name = "log10\n(adj. P value)"
+      ) +
+      guides(fill = guide_colourbar(
+        barwidth = unit(0.3, "cm"),
+        ticks.colour = "black",
+        frame.colour = "black"
+      )) +
+      ggtitle(paste("Enriched pathways:\n", l, "=", db_source)) + 
+      xlab("") + 
+      ylab("Gene fraction (DE genes / Pathway size)") +
+      theme_bw() + 
+      theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "right", 
+          axis.text = element_text(size = 12), 
+          axis.title = element_text(face = "bold",size = 12))
+      
+    ## print
+    print(p)
+    
+  }
+  
+  }
+    
+    banner("gene ontology summary: Upregulated processes", "*")
+    bptop <- myTopGoBP(up.ens, df)
+    banner("BP")
+    print(head(bptop))
+    write.csv(bptop, paste0("results_mouse_Smpd1_ko/", l, "_BP_upregulated_GO.csv"))
+
+    mftop <- myTopGoMF(up.ens, df)
+    banner("MF")
+    print(head(mftop))
+    write.csv(mftop, paste0("results_mouse_Smpd1_ko/", l, "_MF_upregulated_GO.csv"))
+
+    cctop <- myTopGoCC(up.ens, df)
+    banner("CC")
+    print(head(cctop))
+    write.csv(cctop, paste0("results_mouse_Smpd1_ko/", l, "_CC_upregulated_GO.csv"))
+
+    banner("gene ontology summary: Downregulated processes", "*")
+    bpdown <- myTopGoBP(down.ens, df)
+    banner("BP")
+    print(head(bpdown))
+    write.csv(bpdown, paste0("results_mouse_Smpd1_ko/", l, "_BP_downregulated_GO.csv"))
+
+    mfdown <- myTopGoMF(down.ens, df)
+    banner("MF")
+    print(head(mfdown))
+    write.csv(mfdown, paste0("results_mouse_Smpd1_ko/", l, "_MF_downregulated_GO.csv"))
+
+    ccdown <- myTopGoCC(down.ens, df)
+    banner("CC")
+    print(head(ccdown))
+    write.csv(ccdown, paste0("results_mouse_Smpd1_ko/", l, "_CC_downregulated_GO.csv"))
+  
+}  
+```
+
+### Network Analysis
+
+```{r}
+## bioMart
+ensembl <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+
+for (l in names(filtered_list)) {
+  
+  banner(l)
+  
+  df <- filtered_list[[l]] %>%
+    mutate(confidence = case_when(padj >= 0.01 ~ "not significant", 
+                                  padj < 0.01 & confect >= 0.5 ~ "> 0.5", 
+                                  padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5", 
+                                  padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1", 
+                                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", 
+                                  padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", 
+                                  padj < 0.01 & confect <= -0.5 ~ "< -0.5", TRUE ~ NA_character_)) 
+  
+  bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = df$Symbol, mart = ensembl)
+  
+  df$EntrezID <- bm$entrezgene_id[match(df$Symbol, bm$external_gene_name)]
+  
+  universe.ens <- df %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  up.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  down.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  idx <- ids2indices(gene.sets = gset, identifiers = df$EntrezID)
+  
+  dat <- cameraPR(df$log2FoldChange, idx, sort = FALSE)
+  dat$PValue.Mixed <- cameraPR(abs(df$log2FoldChange), idx, sort = FALSE)$PValue
+  dat$FDR.Mixed <- p.adjust(dat$PValue.Mixed, method = "BH")
+  dat$name <- rownames(dat)
+
+  dat$Direction <- as.character(dat$Direction)
+  dat$Direction[dat$FDR > 0.05] <- "Mixed"
+  dat$Direction[dat$Direction == "Mixed" & dat$FDR.Mixed > 0.05] = "NOT"
+  dat$Direction <- factor(dat$Direction, levels = c("NOT", "Up", "Down", "Mixed"))
+  
+  idx <- which(dat$Direction == "Mixed")
+  if (length(idx) > 0)
+    dat$FDR[idx] = dat$FDR.Mixed[idx]
+  
+  dat <- dat[, -grep("\\.Mixed", names(dat))]
+  dat <- dat[dat$Direction != "NOT", ]
+  dat$Direction <- factor(dat$Direction, levels = c("Up", "Down", "Mixed"))
+
+  # only keep gene sets present in the data
+  id.keep <- which(names(gset) %in% dat$name)
+  gset.subset <- gset[id.keep]
+  
+  # adjacency matrix
+  m.adj <- sapply(gset.subset, 
+                  function(x) 
+                    sapply(gset.subset, function(y) length(intersect(unlist(x),unlist(y)))))
+  
+  diag(m.adj) = 0
+
+  # Jaccard index matrix
+  NGenes <- sapply(gset.subset, length)
+  m.union <- outer(NGenes, NGenes, "+") - m.adj
+  m.jacc <- m.adj/m.union
+
+  # apply cutoff to Jaccard matrix
+  m.adj1 <- m.adj * (m.jacc > 0.1)
+
+  # construct network object
+  net <- graph_from_adjacency_matrix(m.adj1, "upper", diag = FALSE, weighted = TRUE)
+
+  # add vertex features
+  V(net)$size <- dat$NGenes
+
+  # choose node colors
+  palette <- brewer.pal(9, "Set1")[c(1, 2, 9)]
+  names(palette) <- c("Up", "Down", "Mixed")
+
+  V(net)$color <- palette[dat$Direction]
+  V(net)$Direction <- as.character(dat$Direction)
+
+  # plot ggnet2(net, size = 2, color = 'Direction', palette = palette,
+  # edge.size = 1, edge.color = '#99CC33') identify singletones
+  singletons <- which(igraph::degree(net) == 0)
+  net1 <- delete_vertices(net, singletons)
+  in.single <- which(dat$name %in% V(net)$name[singletons])
+  tab.net <- dat[in.single, ]
+  tab.net$FDR <- signif(tab.net$FDR, 2)
+  tab.net$name <- gsub("_", " ", tab.net$name)
+
+  ## identify binary systems
+  
+  clu1 <- igraph::components(net1)
+  clu.lt3 <- which(sizes(clu1) < 5)
+  v.clu.lt3 <- which(clu1$membership %in% clu.lt3)
+  net2 <- delete_vertices(net1, v.clu.lt3)
+  clu2 <- igraph::components(net2)
+  in.clu.lt3 <- which(dat$name %in% V(net1)$name[v.clu.lt3])
+  tab.net1 <- dat[in.clu.lt3, ]
+  tab.net1$FDR <- signif(tab.net1$FDR, 2)
+  cludp <- clu1$membership[v.clu.lt3]
+  cludp <- data.frame(name = names(cludp), id = as.numeric(cludp))
+  tab.net1 <- merge(tab.net1, cludp)
+  tab.net1$name <- gsub("_", " ", tab.net1$name)
+  
+  ## detect communities
+  net2 <- delete_edge_attr(net2, "weight")
+  clu3 <- cluster_edge_betweenness(net2)
+  
+  # delete edges between communities
+  net3 <- delete_edges(net2, which(as.vector(crossing(clu3, net2))))
+  
+  # remove clusters of size <5
+  small_cluster_ids <- which(sizes(clu3) < 5)
+  small_cl_v <- which(clu3$membership %in% small_cluster_ids)
+  net3 <- delete_vertices(net3, small_cl_v)
+  
+  clu3 <- igraph::components(net3)
+  
+  nodecol <- c(brewer.pal(9, "Paired"), brewer.pal(9, "Set3"))
+  nodecol <- colorRampPalette(nodecol)(max(clu3$membership))
+  
+  ## lattice of annotated networks
+  clust <- data.frame(cl = clu3$membership)
+  rownames(clust) <- names(V(net3))
+  
+  # generate cluster titles
+  cl3.lab.txt <- tapply(rownames(clust), clust$cl, clust_head)
+  
+  # remove NAs
+  cl3.lab.txt <- gsub("[[:space:]]?NA[[:space:]]?", "", cl3.lab.txt)
+  cl3.lab.txt <- data.frame(cl3.lab.txt)
+  # clu3 <- igraph::components(net3)
+  clu.order <- order(clu3$csize, decreasing = TRUE)
+  clu3$mem <- match(clu3$membership, clu.order)
+  
+  clu3$label <- cl3.lab.txt$cl3.lab.txt[clu3$membership]
+  clu3$label[duplicated(clu3$label)] <- NA
+  clu3$label <- toupper(clu3$label)
+  clu3$label <- sub("(^.{10,30})[[:space:]]", "\\1\\\n", clu3$label)
+  
+  ## print
+  p <- ggnet2(net3, 
+              size = 0, 
+              label = FALSE, 
+              color = nodecol[clu3$membership],
+              edge.size = 1, 
+              edge.color = "grey") + 
+    geom_point(color = "black") +
+    geom_point(aes(color = color)) + 
+    geom_label_repel(aes(label = clu3$label,
+                         color = color), 
+                     alpha = 0.75, 
+                     fontface = "bold", 
+                     size = 3, 
+                     box.padding = 0.1,
+                     label.padding = 0.1, 
+                     na.rm = TRUE)
+  
+  print(p)
+
+
+  # generate a list of ggplots
+  g <- list(max(clu3$membership))
+  set.seed(123456)
+
+  for (ii in 1:max(clu3$membership)) {
+    subgf <- induced_subgraph(net3, which(clu3$mem == ii))
+                
+    # generate titles with one optional line break
+    title <- substr(toupper(cl3.lab.txt$cl3.lab.txt[clu.order][ii]), 1, 60)
+    
+    if (nchar(title) > 25) {
+      title <- sub("(^.{10,30})[[:space:]]", "\\1\\\n", title)
+      }
+    
+    # generate node labels using word 2-5 of the geneset name
+    
+    v.label <- names(V(subgf))
+    
+    v.label <- lapply(v.label, function(x) strsplit(x, "_")[[1]])
+    v.label <- sapply(v.label, function(x) paste(x[2:min(5, length(x))], collapse = "_"))
+
+    # clean up geneset names
+    v.label <- gsub("_PATHWAY", "", v.label)
+    v.label <- gsub("_SIGNALING", "", v.label)
+
+    # introduce line breaks
+    v.label <- gsub("_", "\n", v.label)
+
+    # remove node labels for large clusters
+    if (length(v.label) > 5)
+      v.label = rep(NA, length(v.label))
+    
+    g[[ii]] = ggnet2(subgf, 
+                     edge.size = 0.5, 
+                     edge.color = "#99CC33", label = FALSE,
+                  size = V(subgf)$size, 
+                  max_size = 3, 
+                  size.cut = 4, 
+                  color = palette[V(subgf)$Direction]) +
+                  theme(legend.position = "none", 
+                        plot.title = element_text(size = 6),
+                    panel.grid = element_blank()) + 
+      geom_label_repel(label = v.label,
+                       size = 2, 
+                       box.padding = 0.1, 
+                       label.padding = 0.1) + 
+      ggtitle(title)
+    
+    }
+  
+  nr.cols <- min(4, max(clu3$membership))
+  nr.rows <- ceiling(max(clu3$membership)/nr.cols)
+  
+  width <- sapply(g, function(x) nrow(x$data))
+  grid.arrange <- getFromNamespace("grid.arrange", asNamespace("gridExtra"))
+  
+  if (length(g) < 20) {
+    g.length <- length(g)
+    } else 
+      g.length <- 20
+  
+  g <- grid.arrange(grobs = g[seq(g.length)], 
+                    ncol = nr.cols)
+  
+  print(g)
+}
+```
+
+### enriched KEGG pathways
+
+```{r}
+## bioMart
+ensembl <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+
+for (l in names(filtered_list)) {
+  
+  banner(l)
+  
+  df <- filtered_list[[l]] %>%
+    mutate(confidence = case_when(padj >= 0.01 ~ "not significant", 
+                                  padj < 0.01 & confect >= 0.5 ~ "> 0.5", 
+                                  padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5", 
+                                  padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1", 
+                                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", 
+                                  padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", 
+                                  padj < 0.01 & confect <= -0.5 ~ "< -0.5", TRUE ~ NA_character_)) 
+  
+  bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = df$Symbol, mart = ensembl)
+  
+  df$EntrezID <- bm$entrezgene_id[match(df$Symbol, bm$external_gene_name)]
+  df$EnsemblID <- bm$ensembl_gene_id[match(df$Symbol, bm$external_gene_name)]
+  
+  universe.entrez <- df %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  up.entrez <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  down.entrez <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    pull(EntrezID) %>%
+    na.omit()
+  
+  banner("keggStat: Upregulated processes", "*")
+  kegg.up <- keggStats(up.entrez, universe.entrez)
+  table.up <- summary(kegg.up)
+  print(head(table.up))
+  write.csv(table.up, paste0("results_mouse_Smpd1_ko/", l, "_MF_upregulated_KEGG.csv"))
+  
+  banner("keggStat: Downregulated processes", "*")
+  kegg.down <- keggStats(down.entrez, universe.entrez)
+  table.down <- summary(kegg.down)
+  print(head(table.down))
+  write.csv(table.down, paste0("results_mouse_Smpd1_ko/", l, "_MF_downregulated_KEGG.csv"))
+  
+  banner("GSEA", "*")
+  ranks <-df$log2FoldChange
+  names(ranks) <- df$EntrezID
+  ranks <- ranks[!duplicated(names(ranks))]
+  
+  banner("gsea Hallmarks geneset")
+  pathways_Mm.h <- Mm.H
+  fgseaRes <- fgsea(pathways_Mm.h, ranks, minSize = 5, maxSize = 500, nperm = 1000)
+  topPathwaysUp <- fgseaRes[ES > 0][head(order(pval), n = 5), pathway]
+  topPathwaysDown <- fgseaRes[ES < 0][head(order(pval), n = 5), pathway]
+  topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+  
+  plot.new()
+  plotGseaTable(pathways_Mm.h[topPathways], ranks, fgseaRes, gseaParam = 0.5)
+  
+  ## save results
+  data.table::fwrite(fgseaRes, paste0("results_mouse_Smpd1_ko/", l, "_gsea_hallmarks.txt"),
+                     sep = "\t", sep2 = c("", " ", ""))
+  ## plot gsea
+  p <- fgseaRes %>%
+    as.data.frame() %>%
+    arrange(desc(NES)) %>%
+    filter(padj < 0.05) %>%
+    filter(row_number() > max(row_number()) - 5 | row_number() <= 5) %>%
+    mutate(NES.col = ifelse(NES > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(pathway = gsub("_", " ", pathway)) %>%
+    mutate(pathway = str_wrap(pathway, width = 20)) %>%
+    ggplot(aes(x = reorder(pathway, NES), y = NES)) + 
+    geom_col(aes(fill = NES.col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "Pathway",
+         y = "Normalized Enrichment Score", 
+         title = paste("GSEA:hallmarks", l)) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) + 
+    scale_fill_identity()
+  ## print
+  print(p)
+  
+  ggsave(paste0("results_mouse_Smpd1_ko/",l,"_hallmarks.pdf"),
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+  
+  banner("gsea GO geneset")
+  pathways_Mm.c5 <- Mm.c5
+  fgseaRes <- fgsea(pathways_Mm.c5, ranks, minSize = 5, maxSize = 500, nperm = 1000)
+  topPathwaysUp <- fgseaRes[ES > 0][head(order(pval), n = 10), pathway]
+  topPathwaysDown <- fgseaRes[ES < 0][head(order(pval), n = 10), pathway]
+  topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+  
+  plot.new()
+  plotGseaTable(pathways_Mm.c5[topPathways], ranks, fgseaRes, gseaParam = 0.5)
+  
+  data.table::fwrite(fgseaRes, paste0("results_mouse_Smpd1_ko/", l, "_gsea_go.txt"),
+                     sep = "\t", sep2 = c("", " ", ""))
+  
+  ## plot gsea
+    p <- fgseaRes %>%
+    as.data.frame() %>%
+    arrange(desc(NES)) %>%
+    filter(padj < 0.05) %>%
+    filter(row_number() > max(row_number()) - 5 | row_number() <= 5) %>%
+    mutate(NES.col = ifelse(NES > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(pathway = gsub("_", " ", pathway)) %>%
+    mutate(pathway = str_wrap(pathway, width = 20)) %>%
+    ggplot(aes(x = reorder(pathway, NES), y = NES)) + 
+    geom_col(aes(fill = NES.col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "Pathway",
+         y = "Normalized Enrichment Score", 
+         title = paste("GSEA:GO", l)) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) + 
+    scale_fill_identity()
+  ## print
+  print(p)
+ 
+  banner("gsea curated geneset")
+  pathways_Mm.c2 <- Mm.c2
+  fgseaRes <- fgsea(pathways_Mm.c2, ranks, minSize = 5, maxSize = 500, nperm = 1000)
+  topPathwaysUp <- fgseaRes[ES > 0][head(order(pval), n = 10), pathway]
+  topPathwaysDown <- fgseaRes[ES < 0][head(order(pval), n = 10), pathway]
+  topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+  
+  plot.new()
+  plotGseaTable(pathways_Mm.c2[topPathways], ranks, fgseaRes, gseaParam = 0.5)
+  
+  data.table::fwrite(fgseaRes, paste0("results_mouse_Smpd1_ko/", l, "_gsea_curated.txt"),
+                     sep = "\t", sep2 = c("", " ", ""))
+  
+  ## plot gsea
+  p <- fgseaRes %>%
+    as.data.frame() %>%
+    arrange(desc(NES)) %>%
+    filter(padj < 0.05) %>%
+    filter(row_number() > max(row_number()) - 5 | row_number() <= 5) %>%
+    mutate(NES.col = ifelse(NES > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(pathway = gsub("_", " ", pathway)) %>%
+    mutate(pathway = str_wrap(pathway, width = 20)) %>%
+    ggplot(aes(x = reorder(pathway, NES), y = NES)) + 
+    geom_col(aes(fill = NES.col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "Pathway",
+         y = "Normalized Enrichment Score", 
+         title = paste("GSEA:Curated", l)) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) + 
+    scale_fill_identity()
+  ## print
+  print(p)
+  
+  banner("gsea oncogenic geneset")
+  pathways_Mm.c6 <- Mm.c6
+  fgseaRes <- fgsea(pathways_Mm.c6, ranks, minSize = 5, maxSize = 500, nperm = 1000)
+  topPathwaysUp <- fgseaRes[ES > 0][head(order(pval), n = 10), pathway]
+  topPathwaysDown <- fgseaRes[ES < 0][head(order(pval), n = 10), pathway]
+  topPathways <- c(topPathwaysUp, rev(topPathwaysDown))
+  
+  plot.new()
+  plotGseaTable(pathways_Mm.c6[topPathways], ranks, fgseaRes, gseaParam = 0.5)
+  
+  data.table::fwrite(fgseaRes, paste0("results_mouse_Smpd1_ko/", l, "_gsea_oncogenic.txt"),
+                     sep = "\t", sep2 = c("", " ", ""))
+  
+  ## plot gsea
+  p <- fgseaRes %>%
+    as.data.frame() %>%
+    arrange(desc(NES)) %>%
+    filter(padj < 0.05) %>%
+    filter(row_number() > max(row_number()) - 5 | row_number() <= 5) %>%
+    mutate(NES.col = ifelse(NES > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(pathway = gsub("_", " ", pathway)) %>%
+    mutate(pathway = str_wrap(pathway, width = 20)) %>%
+    ggplot(aes(x = reorder(pathway, NES), y = NES)) + 
+    geom_col(aes(fill = NES.col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "Pathway",
+         y = "Normalized Enrichment Score", 
+         title = paste("GSEA:Oncogenic", l)) +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) + 
+    scale_fill_identity()
+  ## print
+  print(p)
+}
+```
+
+### reporter metabolite analysis
+
+# ```{r}
+# # Load the data from the RDA file
+# load("mm_metabolic.rda")
+# 
+# g <- c()
+# s <- c()
+# 
+# for (m in names(mm_metabolic)) {
+#   
+#   met <- mm_metabolic[[m]]
+#   met <- met[3:length(met)]
+#   
+#   mm <- rep(m, times=length(met))
+#   s <- append(s, mm)
+#   g <- append(g, met)
+#   
+# }
+# 
+# gsc <- cbind(g,s)
+# gsc <- loadGSC(gsc)
+# 
+# 
+# 
+# for (l in names(filtered_list)) {
+#   
+#   banner(l)
+#   
+#   df <- filtered_list[[l]] %>%
+#     mutate(confidence = case_when(padj >= 0.01 ~ "not significant", 
+#                                   padj < 0.01 & confect >= 0.5 ~ "> 0.5", 
+#                                   padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5", 
+#                                   padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1", 
+#                                   padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", 
+#                                   padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", 
+#                                   padj < 0.01 & confect <= -0.5 ~ "< -0.5", TRUE ~ NA_character_)) %>%
+#     filter(confidence != "not significant")
+#     
+#   
+#   bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+#     "external_gene_name", "gene_biotype", "description"), values = df$Symbol, mart = ensembl)
+#   
+#   df$EnsemblID <- bm$ensembl_gene_id[match(df$Symbol, bm$external_gene_name)]
+#   
+#   ## p values and logFC
+#   pval <- df$padj %>%
+#     setNames(df$Symbol)
+#             
+#   logfc <- df$log2FoldChange %>%
+#     setNames(df$Symbol)
+#   
+# 
+#   ## run reporter statistics
+#   gsaRes <- piano::runGSA(geneLevelStats = pval, 
+#                    directions = logfc, 
+#                    gsc = gsc, 
+#                    nPerm = 1000)
+#   
+#   ## visualize the top most significant gene sets
+#   GSAheatmap(gsaRes, 
+#              cutoff = 2, 
+#              adjusted = TRUE, 
+#              cellnote = "rank", 
+#              colorkey = FALSE,
+#              cex = 1, 
+#              ncharLabel = 50, 
+#              columnnames = "abbr")
+#   
+# }
+# ```
+
+### ssGSEA
+
+```{r}
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+
+load("mm_metabolic.rda")
+corrected_mat <- readRDS("results_mouse_Smpd1_ko/uncorrected_mat_kpc1050.rds") %>%
+  as.data.frame() %>%
+  dplyr::select(-contains("OE"))
+
+bm <- getBM(filters = "external_gene_name", 
+            attributes = c("ensembl_gene_id", "entrezgene_id",
+                           "external_gene_name", "gene_biotype", 
+                           "description"), 
+            values = rownames(corrected_mat), 
+            mart = ensembl)
+ 
+corrected_mat$EntrezID <- bm$entrezgene_id[match(rownames(corrected_mat),
+                                                   bm$external_gene_name)]
+ 
+corrected_mat <- corrected_mat %>%
+  drop_na(EntrezID) %>%
+  mutate(EntrezID = as.character(EntrezID)) %>%
+  rownames_to_column("Symbol") %>%
+  dplyr::select(-Symbol) %>%
+  distinct(EntrezID, .keep_all = TRUE) %>%
+  column_to_rownames("EntrezID")
+
+corrected_mat <- log2(corrected_mat + 1)
+
+exprs <- ExpressionSet(data.matrix(corrected_mat))
+
+gsva <- GSVA::gsva(exprs, Mm.H)
+
+ssgsea <- exprs(gsva)
+
+# kras_orthology <- KEGGREST::keggGet("K07827")
+# 
+# kras_orthology <- paste0("KEGG_",toupper(janitor::make_clean_names(unname(kras_orthology[[1]][["PATHWAY"]]))))
+
+# ssgsea <- ssgsea[rownames(ssgsea) %in% gsub("_MM_", "_",names(mm_metabolic)),]
+# ssgsea <- ssgsea[grepl("KEGG_",rownames(ssgsea)), ]
+
+
+# ssgsea <- ssgsea[rownames(ssgsea) %in% kras_orthology,]
+
+
+## column annotations
+se <- readRDS("results_mouse_Smpd1_ko/summarizedExperiemnts_kpc1050.rds")
+
+ann <- data.frame(Status = se$Condition,
+                  Clone = se$Clone)
+
+rownames(ann) <- colnames(se)
+
+ann <- ann %>%
+    filter(Status != "OE")
+
+Status.col <- c("#377EB8","#E41A1C")
+names(Status.col) <- unique(ann$Status)
+
+Clone.col <- c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")
+names(Clone.col) <- unique(ann$Clone)
+
+## combo color
+combo.cols <- list(Status = Status.col,
+                     Clone = Clone.col)
+
+# Load the gtools package
+library(gtools)
+
+# Define the desired order
+order_pattern <- c("C1", "C3", "C5", "C6")
+
+# Get the column names that match the pattern
+matching_cols <- grep(paste(order_pattern, collapse="|"), colnames(ssgsea), value=TRUE)
+
+# Sort the columns based on the order pattern
+sorted_df <- ssgsea[, mixedsort(matching_cols)]
+
+
+p <- pheatmap::pheatmap(sorted_df, 
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   cellwidth = 4,
+                   cellheight = 4,
+                   cutree_rows = 2,
+                   cutree_cols = 2,
+                   border_color = NA,
+                   cluster_rows = TRUE, 
+                   cluster_cols = FALSE,
+                   show_colnames = FALSE)
+
+save_pheatmap_pdf(p,
+                  "results_mouse_Smpd1_ko/ssgsea.pdf",
+                  width=7,
+                  height=8)
+
+## plot data
+ann <- ann %>% 
+  as.data.frame() %>%
+  rownames_to_column("Samples")
+
+p <- ssgsea[rownames(ssgsea) %in% c("HALLMARK_KRAS_SIGNALING_UP", "HALLMARK_KRAS_SIGNALING_DN"),] %>%
+  as.data.frame() %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("Samples") %>%
+  pivot_longer(!Samples, names_to = "hallmark", values_to = "ssgsea_score") %>%
+  inner_join(ann, by = "Samples") %>%
+  mutate(Status=relevel(as.factor(Status), ref="WT")) %>%
+   mutate(hallmark=relevel(as.factor(hallmark), ref="HALLMARK_KRAS_SIGNALING_UP")) %>%
+  ggplot(aes(x = Status, y = ssgsea_score, fill = Status)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill()+
+  geom_jitter(aes(fill=Clone),shape = 21, size = 3, color = "black", alpha= 0.5) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "wilcox.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "WT") +
+  xlab("") +
+  ylab("ssGSEA score") +
+  facet_wrap(~hallmark)
+
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/ssGSEA_score.pdf",
+       plot = p, 
+       width = 10,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

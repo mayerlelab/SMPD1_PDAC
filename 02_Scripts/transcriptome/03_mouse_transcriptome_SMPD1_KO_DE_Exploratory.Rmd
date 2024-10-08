@@ -1,0 +1,873 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome DE (Smpd1 ko)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "DESeq2",
+  "RColorBrewer"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_Smpd1_ko")),
+       dir.create(file.path(paste0(here()), "results_mouse_Smpd1_ko")), FALSE)
+```
+
+## load data
+
+```{r}
+se <- readRDS("results_mouse_Smpd1_ko/summarizedExperiemnts_kpc1050.rds")
+confect_list <- readRDS("results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")
+corrected_mat <- readRDS("results_mouse_Smpd1_ko/corrected_matrix_kpc1050.rds")
+```
+
+## pca plot
+
+```{r}
+## pca analysis
+pcaDat <- log2(corrected_mat + 1)
+
+pcaDat <- pcaDat[, !grepl("_OE_", colnames(pcaDat))]
+
+pca <- prcomp(t(pcaDat))
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+print(screeplot(pca))
+data <- data.frame(pca$x)
+data <- data %>%
+        rownames_to_column("Cells")
+
+data$Cells_s <- gsub("_.*", "", data$Cells)
+data$status <- sub(".*_(WT|KO|OE|OEK).*", "\\1", data$Cells)
+
+## plot PCA
+p <- ggplot(data, aes(PC1, PC2, fill = status)) + 
+  geom_point(shape=21,size = 4,color = "black", show.legend = TRUE) + 
+  ggforce::geom_mark_ellipse(geom = "polygon", alpha = 0.25,
+                             color = "gray", lty = "dotted", show.legend = FALSE, tol = 0.00001) + 
+  scale_fill_manual(values = brewer.pal(length(unique(data$status)),"Set1")) + 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  theme_bw() + 
+  theme(legend.position = "right") +
+  facet_wrap(~Cells_s, ncol = 3,scales = "free")
+
+## print
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/pca_cells.pdf",
+       plot = p, 
+       width = 9,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## expression of goi
+
+```{r, fig.height=4}
+mat <- log2(corrected_mat + 1)
+mat <- as.matrix(t(mat[rownames(mat) %in% "Smpd1",]))
+
+ann <- data.frame(Cells = se$CellLine, Status = se$Condition, `p53 Status` = se$p53Status)
+rownames(ann) <- colnames(se)
+
+Cells.col <- RColorBrewer::brewer.pal(length(unique(ann$Cells)), "Set1")
+names(Cells.col) <- unique(ann$Cells)
+
+Status.col <- RColorBrewer::brewer.pal(length(unique(ann$Status)), "Dark2")
+names(Status.col) <- unique(ann$Status)
+
+p53Status.col <- RColorBrewer::brewer.pal(length(unique(ann$`p53 Status`)), "Set2")
+names(p53Status.col) <- unique(ann$`p53 Status`)
+
+combo.cols <- list(
+  Cells = Cells.col,
+  Status = Status.col,
+  `p53 Status` = p53Status.col
+)
+
+pheatmap::pheatmap(mat, 
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   #border_color = NA,
+                   cluster_rows = FALSE, 
+                   cluster_cols = TRUE,
+                   cellwidth = 10, 
+                   cellheight = 10)
+```
+
+## boxplot
+
+```{r}
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") %>%
+  filter(Condition != "OE")
+
+p <- log2(corrected_mat + 1) %>%
+  as.data.frame() %>%
+  rownames_to_column("Genes") %>%
+  filter(Genes == "Kras") %>%
+  sjmisc::rotate_df(cn=TRUE) %>%
+  rownames_to_column("Samples") %>%
+  inner_join(metadata, by = "Samples") %>%
+  mutate(Condition=relevel(as.factor(Condition), ref="WT")) %>%
+  ggplot(aes(x = Condition, y = Kras, fill = Condition)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Clone), shape = 21, size = 3, color = "black", alpha= 0.5) +
+  theme_bw() +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  ggpubr::stat_compare_means(method = "t.test",
+                             label = "p",
+                             position = "identity",
+                             ref.group = "WT",
+                             angle= 0) +
+  xlab("") +
+  ylab("log2(normalized Counts)") +
+  ylim(6,10)
+
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/Kras_rnaseq.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## volcano plot
+
+```{r}
+for (l in names(confect_list)) {
+  
+  banner(l)
+  
+  df <- confect_list[[l]]
+  
+  df <- df %>%
+                mutate(confidence = case_when(padj >= 0.01 ~ "not significant", padj <
+                  0.01 & confect >= 0.5 ~ "> 0.5", padj < 0.01 & confect >= 0.1 & confect <
+                  0.5 ~ "0.1 - 0.5", padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", padj < 0.01 &
+                    confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", padj < 0.01 & confect <=
+                    -0.5 ~ "< -0.5", TRUE ~ NA_character_))
+  
+  df <- df[order(df$log2FoldChange, decreasing = TRUE), ]
+  
+  ## volcano plot
+  datVolcano <- df %>%
+    arrange(log2FoldChange, desc(padj)) %>%
+    rownames_to_column("label") %>%
+    mutate(color = ifelse(log2FoldChange > 1& padj < 0.01, "up",
+                ifelse(log2FoldChange < -1 & padj < 0.1, "down", "no change"))) %>%
+    mutate(alpha = ifelse(color == "no change", 0.5, 1))
+
+  datVolcanoLabel <- datVolcano %>%
+    filter(row_number() > max(row_number()) - 10 | row_number() <= 10)
+  
+  ## plot
+  p <- ggplot(datVolcano, aes(log2FoldChange, -log10(padj))) + 
+    geom_point(aes(fill = color,alpha = 0.5), size = 2, color = "gray50", pch = 21, show.legend = FALSE) + 
+    ggrepel::geom_text_repel(data = datVolcanoLabel,aes(label = Symbol)) + 
+    theme_bw() + 
+    theme(legend.text.align = 0) + 
+    scale_x_continuous(breaks = seq(-10,10, 2)) + 
+    scale_fill_manual(values = c(up = "#CA4841", down = "#3783BB", `no change` = "#F7F7F7")) +
+    labs(x = "log2(fold changes)", y = "-log10(adj. P-value)") +
+    ggtitle(l)
+
+  print(p)
+
+}
+```
+
+## plotMA
+
+```{r}
+palette <-
+  setNames( c("#053061","#3783BB","#A6CFE3","#F7F7F7","#F7B799","#CA4841","#67001F"),
+            c("< -0.5","-0.5 - -0.1","-0.1 - 0","not significant","0 - 0.1","0.1 - 0.5","> 0.5") )
+
+
+for (l in names(confect_list)) {
+  
+  banner(l)
+  
+  df <- confect_list[[l]]
+  
+  df <- df %>%
+                mutate(confidence = case_when(padj >= 0.01 ~ "not significant", padj <
+                  0.01 & confect >= 0.5 ~ "> 0.5", padj < 0.01 & confect >= 0.1 & confect <
+                  0.5 ~ "0.1 - 0.5", padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", padj < 0.01 &
+                    confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", padj < 0.01 & confect <=
+                    -0.5 ~ "< -0.5", TRUE ~ NA_character_))
+  
+  label_df1 <- df[order(df$confect, decreasing = TRUE), ]  %>%
+    filter(confidence %in% c("> 0.5", "0.1 - 0.5")) %>%
+    group_by(confidence) %>%
+    filter(row_number() <= 3) %>%
+    ungroup()
+  
+  label_df2 <- df[order(df$confect, decreasing = TRUE), ]  %>%
+    filter(confidence %in% c("< -0.5","-0.5 - -0.1")) %>%
+    group_by(confidence) %>%
+    filter(row_number() > max(row_number()) - 3) %>%
+    ungroup()
+  
+  label_df <- bind_rows(label_df1, label_df2)
+  
+  main <- df %>%
+    ggplot(aes(x = log2(baseMean), 
+             y = log2FoldChange,
+             fill=confidence,
+             color=confidence)) +
+    geom_point(data = . %>% filter(confidence == "not significant"), shape=15,color = "gray50", alpha=0.5, show.legend = FALSE) +
+    geom_point(data = . %>% filter(confidence != "not significant"), shape=21) +
+    ggrepel::geom_label_repel(data = label_df,aes(label = Symbol), show.legend = FALSE, max.overlaps = Inf, alpha= 0.8, color="white") +
+    scale_color_manual(values = palette) +
+    scale_fill_manual(values = palette,
+                    breaks = names(palette)) +
+    labs(x = "log2(Base Mean)",
+         y = "log2(Fold Change)",
+         fill="Confident \nLog2 FoldChange") +
+    guides(color="none") +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    theme_bw()
+
+  top <- df %>%
+    ggplot(aes(x= log2(baseMean),
+               fill =confidence,
+               group=confidence)) +
+    geom_histogram(data = . %>% filter(confidence != "not significant"),
+                                     color="gray", show.legend = FALSE, size=0.2) +
+    scale_fill_manual(values = palette) +
+    labs(x = "", 
+         y = "",
+         fill="") +
+    theme_void()
+  
+  left <- df %>%
+    ggplot(aes(x= log2FoldChange,
+               fill =confidence,
+               group=confidence)) +
+    geom_histogram(data = . %>% filter(confidence != "not significant"),
+                   color="gray", show.legend = FALSE, size=0.2) +
+    scale_fill_manual(values = palette) +
+    labs(x = "", 
+         y = "",
+         fill="") +
+    coord_flip() +
+    scale_y_reverse() +
+    theme_void()
+
+  empty <- ggplot()+
+    geom_point(aes(1,1), colour="white") +
+    theme(
+      plot.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      panel.background = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank()
+      )
+
+  # Arrange the plots together, with appropriate height and width for each row and column
+  p <- patchwork::plot_spacer() +
+    top +
+    left +
+    main +
+    patchwork::plot_layout(nrow = 2,
+                       widths = c(1,4),
+                       heights = c(1,4)) +
+    patchwork::plot_annotation(paste(l))
+
+  print(p)
+  
+  ggsave(paste0("results_mouse_Smpd1_ko/",l,".pdf"),
+       plot = p, 
+       width = 14,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+  
+  df_count <- df %>%
+    dplyr::select(Symbol, confidence) %>%
+    group_by(confidence) %>%
+    summarise(number_of_genes = n())
+  
+  print(df_count)
+}
+```
+
+## heatmap
+
+```{r}
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+
+mat <- log2(corrected_mat + 1)
+mat <- mat[, !grepl("_OE_", colnames(mat))]
+
+ann <- data.frame(Status = se$Condition,
+                  Clone = se$Clone)
+rownames(ann) <- colnames(se)
+ann <- ann %>%
+    filter(Status != "OE")
+
+
+Status.col <- c("#377EB8","#E41A1C")
+names(Status.col) <- unique(ann$Status)
+
+Clone.col <- c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")
+names(Clone.col) <- unique(ann$Clone)
+
+
+  combo.cols <- list(Status = Status.col,
+                     Clone = Clone.col)
+
+for (l in names(confect_list)) {
+  
+  banner(l)
+  
+  if (l != "KPC1050_KO_vs_WT") {
+    next
+  }
+  
+  df <- confect_list[[l]]
+  
+  df <- df %>%
+                mutate(confidence = case_when(padj >= 0.01 ~ "not significant", padj <
+                  0.01 & confect >= 0.5 ~ "> 0.5", padj < 0.01 & confect >= 0.1 & confect <
+                  0.5 ~ "0.1 - 0.5", padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", padj < 0.01 &
+                    confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", padj < 0.01 & confect <=
+                    -0.5 ~ "< -0.5", TRUE ~ NA_character_))
+  
+  label_df <- df[order(df$confect, decreasing = TRUE), ]  %>%
+    filter(confidence != "not significant") %>%
+    filter(row_number() <= 30 | row_number() > max(row_number()) - 30) 
+  
+  
+  mat1 <- as.matrix(mat[rownames(mat) %in% label_df$Symbol,])
+  mat1 <- na.omit(mat1)
+
+  p <- pheatmap::pheatmap(mat1, 
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   cellwidth = 5,
+                   cellheight = 5,
+                   cutree_rows = 2,
+                   cutree_cols = 2,
+                   border_color = NA,
+                   cluster_rows = TRUE, 
+                   cluster_cols = TRUE,
+                   show_colnames = FALSE)
+  
+  print(p)
+  
+  save_pheatmap_pdf(p,
+                  "results_mouse_Smpd1_ko/heatmap_ko.pdf",
+                  width=4,
+                  height=6)
+  
+}
+```
+
+## EMT score
+
+```{r}
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/EMT_signature_score.R")
+
+emt_df <- EMT_signature_score(log2(corrected_mat+1), organism = "mmusculus")
+
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") %>%
+  filter(Condition != "OE")
+
+scientific_notation <- function(x) {
+  ifelse(x == 0, "0", scales::format_format(scientific = TRUE)(x))
+}
+
+## plot data
+p <- emt_df %>%
+  rownames_to_column("Samples") %>%
+  inner_join(metadata, by = "Samples") %>%
+  mutate(Condition=relevel(as.factor(Condition), ref="WT")) %>%
+  ggplot(aes(x = Condition, y = Creighton_EMT_score, fill = Condition)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill()+
+  geom_jitter(aes(fill=Clone),shape = 21, size = 3, color = "black", alpha= 0.5) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "WT",
+                             angle= 90) +
+  coord_cartesian(ylim = c(min(emt_df$Creighton_EMT_score) * 1.1, max(emt_df$Creighton_EMT_score) * 2)) +
+  xlab("") +
+  ylab("Creighton EMT score")
+
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/EMT_score.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## KDS30 score
+
+```{r}
+kds30 <- read.csv("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kds30_pmid_36852277.csv", 
+                          sep = ";")
+kds30$KDS30 <- scan(text=kds30$KDS30, dec=",", sep=".")
+kds30_genes <- unlist(kds30$Gene.ID)
+  
+## convert to mouse
+.convertHumanGeneList <- function(gene_list){
+  mouse_human_genes =
+    read.csv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",sep="\t")
+  
+  output = c()
+  
+  for(gene in gene_list){
+    class_key = (mouse_human_genes %>% filter(Symbol == gene & Common.Organism.Name=="human"))[['DB.Class.Key']]
+    if(!identical(class_key, integer(0)) ){
+      mouse_genes = (mouse_human_genes %>% filter(DB.Class.Key == class_key & Common.Organism.Name=="mouse, laboratory"))[,"Symbol"]
+      if (length(mouse_genes) != 1) {
+        mouse_genes <- mouse_genes[1]
+      }
+      for(mouse_gene in mouse_genes){
+        output = append(output,mouse_gene)
+      }
+    } else
+      output = append(output, NA)
+  }
+  
+  
+  return (output)
+}
+
+kds30_genes<- .convertHumanGeneList(kds30_genes)
+
+
+mat <- corrected_mat+1
+  
+## se_to_mat
+mat_sub <- mat[rownames(mat) %in% kds30_genes,]
+  
+mat_sub <- heatmaply::percentize(mat_sub)
+
+kds30$Gene.ID_mouse <- kds30_genes
+  
+kds30 <- kds30[kds30$Gene.ID_mouse %in% rownames(mat_sub),]
+
+kds30_r <- data.frame()
+
+for ( i in colnames(mat_sub)) {
+    pcc <- cor.test(mat_sub[[i]], kds30$KDS30)
+    kds30_r <- rbind(kds30_r, data.frame(samples=i,
+                                 kds30=pcc$estimate))
+}
+  
+
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") %>%
+  filter(Condition != "OE")
+
+scientific_notation <- function(x) {
+  ifelse(x == 0, "0", scales::format_format(scientific = TRUE)(x))
+}
+
+## plot data
+p <- kds30_r %>%
+  inner_join(metadata, by = c("samples"="Samples")) %>%
+  mutate(Condition=relevel(as.factor(Condition), ref="WT")) %>%
+  ggplot(aes(x = Condition, y = kds30, fill = Condition)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill()+
+  geom_jitter(aes(fill=Clone),shape = 21, size = 3, color = "black", alpha= 0.5) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "wilcox.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "WT",
+                             angle= 90) +
+  coord_cartesian(ylim = c(min(kds30_r$kds30) * 1.1, max(kds30_r$kds30) * 2)) +
+  xlab("") +
+  ylab("KDS30")
+
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/EMT_score.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## TS score
+
+```{r}
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/TS_signature_score.R")
+
+ts_df <- TS_signature_score(log2(corrected_mat+1), organism = "mmusculus")
+
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") %>%
+  filter(Condition != "OE")
+
+scientific_notation <- function(x) {
+  ifelse(x == 0, "0", scales::format_format(scientific = TRUE)(x))
+}
+
+## plot data
+p <- ts_df %>%
+  rownames_to_column("Samples") %>%
+  inner_join(metadata, by = "Samples") %>%
+  mutate(Condition=relevel(as.factor(Condition), ref="WT")) %>%
+  ggplot(aes(x = Condition, y = TS_score, fill = Condition)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill()+
+  geom_jitter(aes(fill=Clone),shape = 21, size = 3, color = "black", alpha= 0.5) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "WT") +
+  coord_cartesian(ylim = c(min(ts_df$TS_score) * 1.1, max(ts_df$TS_score) * 2)) +
+  xlab("") +
+  ylab("TS score")
+
+print(p)
+
+ggsave("results_mouse_Smpd1_ko/TS_score.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## venn diagram
+
+```{r}
+cell_lines <- unique(gsub("_.*","",names(confect_list)))
+
+for (l in cell_lines) {
+  
+  list_comp <- names(confect_list)[grepl(l , names(confect_list))]
+  
+  venn_df <- list()
+  
+  if (length(list_comp) > 1){
+  
+  for (vn in list_comp) {
+    
+    if (grepl("_WT", vn)) {
+    
+    df <- confect_list[[vn]]
+    
+    df <- subset(df, df$padj < 0.01)
+    
+    name <- gsub(paste0(l, '_'), '', vn)
+    
+    #name <- gsub(".*vs_", "", name)
+    
+    venn_df[[name]] <- df$Symbol
+    }
+    
+  }
+  
+  p <- ggvenn::ggvenn(venn_df, 
+                      fill_color = RColorBrewer::brewer.pal(2, "Set1")) +
+    ggtitle(l)
+  
+  print(p)
+  }
+}
+```
+
+## KPC1050 difference between OE and KO
+
+```{r}
+palette <-
+  setNames( c("#053061","#A6CFE3","gray","#F7B799","#67001F"),
+            c("Low(KO)High(OE)",
+              "Low(KO)Low(OE)",
+              "not significant",
+              "High(KO)High(OE)",
+              "High(KO)Low(OE)") )
+
+alpha_palette <-
+  setNames( c(1,0.5,0.25, 0.5,1),
+            c("Low(KO)High(OE)",
+              "Low(KO)Low(OE)",
+              "not significant",
+              "High(KO)High(OE)",
+              "High(KO)Low(OE)") )
+
+kpc1050_KO <- confect_list[["KPC1050_KO_vs_WT"]] %>%
+  dplyr::select(Symbol, confect, log2FoldChange, padj) %>%
+  rename_with(~ paste0(., "_KO"), everything()) %>%
+  rename("Symbol_KO" = "Symbol") 
+
+df <- confect_list[["KPC1050_OE_vs_WT"]] %>%
+  dplyr::select(confect, Symbol, log2FoldChange, padj) %>%
+  rename_with(~ paste0(., "_OE"), everything()) %>%
+  rename("Symbol_OE" = "Symbol") %>%
+  full_join(kpc1050_KO, by = "Symbol") %>%
+  mutate(confidence = case_when(padj_KO >= 0.01 ~ "not significant",
+                                padj_OE >= 0.01 ~ "not significant",
+                                padj_KO < 0.01 & confect_KO >= 0 &  
+                                padj_OE < 0.01 & confect_OE >= 0 ~ "High(KO)High(OE)",
+                                padj_KO < 0.01 & confect_KO >= 0 &  
+                                padj_OE < 0.01 & confect_OE < 0 ~ "High(KO)Low(OE)",
+                                padj_KO < 0.01 & confect_KO < 0 &  
+                                padj_OE < 0.01 & confect_OE < 0 ~ "Low(KO)Low(OE)",
+                                padj_KO < 0.01 & confect_KO < 0 &  
+                                padj_OE < 0.01 & confect_OE >= 0 ~ "Low(KO)High(OE)",
+                                TRUE ~ NA_character_))
+
+
+
+
+label_df1 <- df %>%
+    filter(confidence == "Low(KO)High(OE)" | confidence == "High(KO)Low(OE)") %>%
+    arrange(desc(confect_OE)) %>%
+    filter(row_number() <= 10)
+
+label_df2 <- df %>%
+    filter(confidence == "Low(KO)High(OE)" | confidence == "High(KO)Low(OE)") %>%
+    arrange(desc(confect_KO)) %>%
+    filter(row_number() <= 10)
+
+label_df <- bind_rows(label_df1, label_df2)
+
+main <- df %>%
+  ggplot(aes(x = log2FoldChange_KO, 
+             y = log2FoldChange_OE,
+             fill=confidence,
+             color=confidence)) +
+    geom_point(data = . %>% filter(confidence == "not significant"), 
+               aes(alpha=confidence),
+               shape=15,color = "gray85",
+               show.legend = FALSE) +
+    geom_point(data = . %>% filter(confidence != "not significant"),
+               aes(alpha=confidence),
+             shape=21) +
+    ggrepel::geom_text_repel(data = label_df,aes(label = Symbol), max.overlaps = 30, 
+                             show.legend = FALSE) +
+    scale_color_manual(values = palette) +
+    scale_alpha_manual(values = alpha_palette) +
+    scale_fill_manual(values = palette,
+                    breaks = names(palette)) +
+    labs(x = "log2(Fod Change) \n knock-out vs WT",
+         y = "log2(Fold Change) \n Overexpression vs WT",
+         fill="Confident \nLog2 FoldChange") +
+    guides(color="none", alpha="none") +
+    guides(fill = guide_legend(reverse = TRUE)) +
+    theme_bw() +
+  geom_hline(yintercept = 0, linetype="dotted") +
+  geom_vline(xintercept = 0, linetype="dotted")
+
+  top <- df %>%
+    ggplot(aes(x= confect_KO,
+               fill =confidence,
+               group=confidence)) +
+    geom_histogram(data = . %>% filter(confidence != "not significant"),
+                                     color="gray", show.legend = FALSE, size=0.5) +
+    scale_fill_manual(values = palette) +
+    labs(x = "", 
+         y = "",
+         fill="") +
+    theme_void()
+  
+  left <- df %>%
+    ggplot(aes(x= confect_OE,
+               fill =confidence,
+               group=confidence)) +
+    geom_histogram(data = . %>% filter(confidence != "not significant"),
+                   color="gray", show.legend = FALSE, size=0.5) +
+    scale_fill_manual(values = palette) +
+    labs(x = "", 
+         y = "",
+         fill="") +
+    coord_flip() +
+    scale_y_reverse() +
+    theme_void()
+
+  empty <- ggplot()+
+    geom_point(aes(1,1), colour="white") +
+    theme(
+      plot.background = element_blank(),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.border = element_blank(),
+      panel.background = element_blank(),
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank(),
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks = element_blank()
+      )
+
+  # Arrange the plots together, with appropriate height and width for each row and column
+  p <- patchwork::plot_spacer() +
+    top +
+    left +
+    main +
+    patchwork::plot_layout(nrow = 2,
+                       widths = c(1,4),
+                       heights = c(1,4)) +
+    patchwork::plot_annotation("KPC OE vs KO")
+
+  print(p)
+  
+
+gene_list_OE_vs_KO <- list()
+
+gene_list_OE_vs_KO["Low(KO)High(OE)"] <- df %>%
+    filter(confidence == "Low(KO)High(OE)") %>%
+    dplyr::select(Symbol)
+
+gene_list_OE_vs_KO["High(KO)Low(OE)"] <- df %>%
+    filter(confidence == "High(KO)Low(OE)") %>%
+    dplyr::select(Symbol)
+
+saveRDS(gene_list_OE_vs_KO, "results_mouse_Smpd1_ko/gene_list_OE_vs_KO.rds")
+```
+
+## consensus gene set
+
+```{r}
+consensus_gene <- list()
+
+for (l in names(confect_list)) {
+  
+  banner(l)
+  
+  df <- confect_list[[l]]
+  
+  gene_list_up <- df %>%
+                mutate(confidence = case_when(padj >= 0.01 ~ "not significant", padj <
+                  0.01 & confect >= 0.5 ~ "> 0.5", padj < 0.01 & confect >= 0.1 & confect <
+                  0.5 ~ "0.1 - 0.5", padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", padj < 0.01 &
+                    confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", padj < 0.01 & confect <=
+                    -0.5 ~ "< -0.5", TRUE ~ NA_character_)) %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    pull(Symbol)
+  
+  consensus_gene[[paste0(l,"_up")]] <- gene_list_up
+  
+  gene_list_down <- df %>%
+                mutate(confidence = case_when(padj >= 0.01 ~ "not significant", padj <
+                  0.01 & confect >= 0.5 ~ "> 0.5", padj < 0.01 & confect >= 0.1 & confect <
+                  0.5 ~ "0.1 - 0.5", padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", padj < 0.01 &
+                    confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", padj < 0.01 & confect <=
+                    -0.5 ~ "< -0.5", TRUE ~ NA_character_)) %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    pull(Symbol)
+  
+  consensus_gene[[paste0(l,"_down")]] <- gene_list_down
+} 
+
+saveRDS(consensus_gene, "results_mouse_Smpd1_ko/consensus_gene_list.rds")
+
+# Convert the list to a data frame
+gene_df <- map_df(consensus_gene, ~enframe(.x, value = "Genes"), .id = "Comparisons") %>%
+  filter(grepl("_KO_vs_WT_", Comparisons)) %>%
+  mutate(Direction = gsub(".*_","", Comparisons)) %>%
+  group_by(Genes, Direction) %>%
+  summarise(Count = n()) %>%
+  filter(Count >= 2) %>%
+  dplyr::select(-Count) %>%
+  split(.$Direction)
+
+saveRDS(gene_df, "results_mouse_Smpd1_ko/processed_consensus_gene_list_kpc1050.rds")
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

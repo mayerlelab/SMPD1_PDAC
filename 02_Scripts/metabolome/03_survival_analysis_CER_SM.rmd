@@ -1,0 +1,208 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome DE (Smpd1 ko)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+# load packages -----------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "ggrepel",
+  "RColorBrewer",
+  "ggpubr",
+  "sjPlot",
+  "survminer",
+  "survival"
+)
+# scripts --------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+# load packages -------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_survival")),
+       dir.create(file.path(paste0(here()), "results_survival")), FALSE)
+
+save_survival_plot <- function(x, filename, width=7, height=7) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$plot)
+   dev.off()
+}
+```
+
+## survival data
+```{r}
+survival_data <- readxl::read_xlsx("../../Data/CER_SM_survival/clinData_metapac_sitesorted_updated.xlsx")
+merge_data_sub <- survival_data %>%
+  filter(STADIUM != "IV") 
+```
+
+## load data
+
+```{r}
+origData <- readRDS("../../Data/Metabolome/processed_data/human_metabolome_combined_ID_VD1_VD2.rds")
+metabolite.metadata <- read.csv("../../Data/masterTable/masterTableMetaboliteNames.csv")
+
+## imputed data
+imputed.data <- origData[["count.matrix"]] %>%
+  sjmisc::rotate_df()
+
+## metadata
+metadata <- origData[["metadata"]] 
+
+## assign column names
+colnames(imputed.data) <- metadata$ALIQUOT_ID
+
+chains <- c("C14", "C16", "C18", "C20", "C22", "C24", "C26")
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  add_rownames("Metabolite") %>%
+  mutate(Metabolite = as.numeric(gsub("^X", "", Metabolite))) %>%
+  left_join(metabolite.metadata, by=c("Metabolite" = "ID")) %>%
+  filter(ONTOLOGY1_NAME == "Complex lipids, fatty acids and related") %>%
+  filter(ONTOLOGY2_NAME == "Ceramides" | ONTOLOGY2_NAME == "Sphingomyelins") %>%
+  filter(grepl("^CER_|^SM_",METABOLITE_NAME)) %>%
+  filter(grepl("d18:1,",METABOLITE_NAME))  %>%## only d18:1
+  filter(grepl(paste(chains, collapse = "|"),METABOLITE_NAME))  %>%
+  group_by(ONTOLOGY2_NAME) %>%
+  summarize_if(is.numeric, funs(mean)) %>%
+  dplyr::select(-Metabolite,-UNIQUE_ANALYTE_ID,-DICT_STRUCTURE_ELUCIDATION_ID) %>%
+  summarize_if(is.numeric, funs(.[ONTOLOGY2_NAME == "Ceramides"] / .[ONTOLOGY2_NAME == "Sphingomyelins"])) %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("Disease") %>%
+  mutate(Disease = gsub("\\..*", "", Disease)) %>%
+  filter(Disease != "CP") %>%
+  rename(ratio = V1) %>%
+  ungroup()
+
+colnames(imputed.data.total) <- c("ALIQUOT_ID","ratio")
+  
+imputed.data.total <- imputed.data.total %>%
+  mutate(ALIQUOT_ID = as.numeric(ALIQUOT_ID)) 
+
+
+merge_data <- merge_data_sub %>%
+  inner_join(imputed.data.total, by= "ALIQUOT_ID") %>%
+  mutate(dicot_ratio = ifelse(ratio > quantile(ratio, 0.25, na.rm = TRUE), "high", "low"))
+
+merge_data$`Overall survival time` <- merge_data$`Overall survival time`
+
+## survival
+## Add survival object
+merge_data$SurvObj <- with(merge_data, Surv(as.numeric(merge_data$`Overall survival time`), 
+                                          merge_data$`Censoring OS` == 1))
+
+merge_data$PFSurvObj <- with(merge_data, Surv(as.numeric(merge_data$`Progression free survival time`), 
+                                          merge_data$`Censoring PFS` == 1))
+
+merge_data$ratio_bins <- cut(merge_data$ratio,
+                             breaks = quantile(merge_data$ratio, probs = seq(0, 1, by = 0.25), na.rm = TRUE),
+                             labels = c(1,2,3,4),
+                             include.lowest = TRUE)
+
+
+## Kaplan-Meier estimator. The "log-log" confidence interval is preferred.
+km.by.MetClusters.os <- survfit(SurvObj ~ dicot_ratio, data = merge_data)  #OS
+
+banner("overall survival")
+summary(km.by.MetClusters.os)$table
+km.by.MetClusters.os_chi <- survdiff(SurvObj ~ dicot_ratio, data = merge_data)
+km.by.MetClusters.os_chi  
+
+## plot
+p <- ggsurvplot(
+  km.by.MetClusters.os,                     # survfit object with calculated statistics.
+  pval = TRUE,              # show p-value of log-rank test.
+  conf.int = FALSE,         # show confidence intervals for point estimaes of survival curves.
+  #xlim=c(0,30),
+  title=paste("CER/SM","\n (overall survival)"),
+  ylab = "Survival probability",
+  xlab = "Time in days",   # customize X axis label.
+  break.time.by = 365,     # break X axis in time intervals by 200.
+  risk.table = "abs_pct",  # absolute number and percentage at risk.
+  risk.table.y.text.col = TRUE,# colour risk table text annotations.
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations in legend of risk table.
+  legend.title = paste("CER/SM expression"),
+  legend.labs = c("High", "Low"),    # change legend labels.
+  palette = 
+    brewer.pal(5,"Set1"), # custom color palettes.
+  legend= c(0.9, 0.7)
+)
+print(p)
+save_survival_plot(p, 
+                   "./results_survival/CER_SM_ratio_os_complete.pdf",
+                   height=4,
+                   width= 4)
+
+## Kaplan-Meier estimator. The "log-log" confidence interval is preferred.
+km.by.MetClusters.pfs <- survfit(PFSurvObj ~ dicot_ratio, data = merge_data)  #OS
+
+banner("progression free survival")
+summary(km.by.MetClusters.pfs)$table
+km.by.MetClusters.pfs_chi <- survdiff(PFSurvObj ~ dicot_ratio, data = merge_data)
+km.by.MetClusters.pfs_chi  
+
+## plot
+p <- ggsurvplot(
+  km.by.MetClusters.pfs,                     # survfit object with calculated statistics.
+  pval = TRUE,              # show p-value of log-rank test.
+  conf.int = FALSE,         # show confidence intervals for point estimaes of survival curves.
+  #xlim=c(0,30),
+  title=paste("CER/SM","\n (progression free survival)"),
+  ylab = "Survival probability",
+  xlab = "Time in days",   # customize X axis label.
+  break.time.by = 365,     # break X axis in time intervals by 200.
+  risk.table = "abs_pct",  # absolute number and percentage at risk.
+  risk.table.y.text.col = TRUE,# colour risk table text annotations.
+  risk.table.y.text = FALSE,# show bars instead of names in text annotations in legend of risk table.
+  legend.title = paste("CER/SM expression"),
+  #legend.labs = c("High", "Low"),    # change legend labels.
+  palette = 
+    brewer.pal(5,"Set1"), # custom color palettes.
+  legend= c(0.9, 0.7)
+)
+print(p)
+save_survival_plot(p, 
+                   "./results_survival/CER_SM_ratio_pfs_complete.pdf",
+                   height=4,
+                   width= 4)
+
+model <- coxph(Surv(`Overall survival time`,`Censoring OS`) ~ dicot_ratio, data = merge_data)
+p <- survminer::ggforest(model)
+print(p)
+
+model <- coxph(Surv(`Progression free survival time`,`Censoring PFS`) ~ dicot_ratio, data = merge_data)
+p <- survminer::ggforest(model)
+print(p)
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

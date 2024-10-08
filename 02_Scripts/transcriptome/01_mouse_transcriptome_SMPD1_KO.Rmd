@@ -1,0 +1,240 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome (Smpd1 ko)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "DESeq2",
+  "RColorBrewer",
+  "SummarizedExperiment",
+  "biomaRt"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_Smpd1_ko")),
+       dir.create(file.path(paste0(here()), "results_mouse_Smpd1_ko")), FALSE)
+```
+
+## load data
+
+```{r}
+########################################
+## Run 1
+########################################
+cmat1 <- read.csv("../../Data/transcriptome/mouse_KO/475UM_Mouse_DGE_Matrix.txt", sep = "\t", skip = 46)
+
+metadata1 <- read.csv("../../Data/transcriptome/mouse_KO/475UM_Mouse_SampleAnnotation.txt", sep = "\t")
+metadata1 <- metadata1 %>%
+   filter(across(everything(), ~ nchar(.) > 0)) %>%
+  mutate_all(~ str_replace_all(., "-", "_")) %>%
+  mutate(BatchRun = "batch1") %>%
+  mutate(Descr_Term05= gsub(".*_", "", UniqueSampleID))
+
+metadata1 <- metadata1 %>%
+  filter(Descr_Term01 == "KPC1050")
+
+qcmat1 <- read.csv("../../Data/transcriptome/mouse_KO/475UM_Mouse_DGE_Matrix.txt", sep = "\t", skip = 21, nrows = 24)
+
+qcmat1 <- qcmat1 %>%
+  dplyr::select(sample, matches("_p")) %>%
+  dplyr::select(-where(~all(is.na(.)))) %>%
+  dplyr::select(-elibsize_p, -mapped_intronicintergenic_p) %>%
+  pivot_longer(-sample, names_to = "variable", values_to = "percent") %>%
+  mutate(format  = if_else(grepl('total_p', variable), 'total reads', 'total reads (mapped)')) %>%
+  right_join(metadata1, by = c("sample" = "Barcode")) %>%
+  mutate(sampleID = paste0(UniqueSampleID, " (",sample, ")"))
+
+########################################
+## Run 2
+########################################
+cmat2 <- read.csv("../../Data/transcriptome/mouse_KO/528AA_Mouse_DGE_Matrix.txt", sep = "\t", skip = 82)
+
+metadata2 <- read.csv("../../Data/transcriptome/mouse_KO/528AA_Mouse_SampleAnnotation.txt", sep = "\t")
+metadata2 <- metadata2 %>%
+   filter(across(everything(), ~ nchar(.) > 0)) %>%
+  mutate_all(~ str_replace_all(., "-", "_")) %>%
+  mutate(BatchRun = "batch2")
+
+metadata2 <- metadata2 %>%
+  filter(Descr_Term01 == "KPC1050") %>%
+  filter(Descr_Term03 != "OEK")
+
+qcmat2 <- read.csv("../../Data/transcriptome/mouse_KO/528AA_Mouse_DGE_Matrix.txt", sep = "\t", skip = 21, nrows = 60)
+
+qcmat2 <- qcmat2 %>%
+  dplyr::select(sample, matches("_p")) %>%
+  dplyr::select(-where(~all(is.na(.)))) %>%
+  dplyr::select(-elibsize_p, -mapped_intronicintergenic_p) %>%
+  pivot_longer(-sample, names_to = "variable", values_to = "percent") %>%
+  mutate(format  = if_else(grepl('total_p', variable), 'total reads', 'total reads (mapped)')) %>%
+  right_join(metadata2, by = c("sample" = "Barcode")) %>%
+  mutate(sampleID = paste0(UniqueSampleID, " (",sample, ")"))
+
+
+## merge datasets
+cmat <- merge(cmat1, cmat2, by = "GENE")
+cmat <- column_to_rownames(cmat, "GENE")
+
+metadata <- bind_rows(metadata1, metadata2)
+metadata <- column_to_rownames(metadata, "UniqueSampleID")
+
+cmat <- cmat[, colnames(cmat) %in% metadata$Barcode]
+colnames(cmat) <- rownames(metadata)[match(colnames(cmat), metadata$Barcode)]
+
+old_names <- c("Descr_Term01", "Descr_Term03", "Descr_Term04", "Descr_Term05")
+new_names <- c("CellLine", "Condition", "Clone", "Replicate")
+
+metadata <- metadata %>% 
+  rename_at(vars(old_names), ~new_names)
+
+metadata <- metadata %>%
+  mutate(p53Status = case_when(
+    CellLine %in% c("KPC1050", "KPC13", "KPC14") ~ "KO",
+    CellLine %in% c("KPC8164", "KPC8166") ~ "MutR172H",
+    CellLine == "DT6606" ~ "WT",
+    TRUE ~ NA_character_
+  ))
+
+qcmat <- bind_rows(qcmat1, qcmat2)
+
+## QC plot
+plot <- ggplot(qcmat, aes(x = percent, y = sampleID, fill = variable)) +
+  geom_bar(stat = "identity", position = "stack", color="black", alpha=0.75) +
+  labs(x = "Percentage", y = "Sample") +
+  theme_bw() +
+  facet_wrap(~format) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(5, "Set1")) +
+  ylab("") +
+  theme(axis.text.y = element_text(size = 5))
+
+plot
+```
+## create se
+
+```{r}
+## bioMart
+ensembl <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+
+bm <- getBM(filters = "external_gene_name", 
+            attributes = c("ensembl_gene_id", "entrezgene_id",
+                           "external_gene_name", "gene_biotype", "description"), 
+            values = rownames(cmat),
+            mart = ensembl)
+
+## add annotations
+annot <- data.frame(symbol = rownames(cmat))
+annot$id <- bm$ensembl_gene_id[match(rownames(cmat), bm$external_gene_name)]
+annot$entrez <- bm$entrezgene[match(rownames(cmat), bm$external_gene_name)]
+annot$biotype <- bm$gene_biotype[match(rownames(cmat), bm$external_gene_name)]
+annot$description <- bm$description[match(rownames(cmat), bm$external_gene_name)]
+
+
+
+## summarised experiments
+se <- SummarizedExperiment(assays = list(counts = as.matrix(cmat)),
+                           colData = metadata,
+                           rowData = annot)
+
+banner("diamension of summarized experiments")
+print(dim(se))
+
+se
+```
+
+## read distibution
+
+```{r}
+total.counts <- apply(assays(se)$counts, 2, sum)
+count.df <- as.data.frame(total.counts)
+count.df$sampleName <- toupper(rownames(count.df))
+
+count.df$Status <- se$Condition
+count.df$Status <- relevel(factor(count.df$Status), "WT")
+## plot
+p <- count.df %>%
+    mutate(sampleName = fct_reorder(sampleName, total.counts, .desc = TRUE)) %>%
+    ggplot(aes(x = sampleName, y = total.counts/1e+06, fill = Status)) + 
+  geom_bar(stat = "identity",color = "black") + 
+  scale_fill_manual(values = brewer.pal(length(unique(count.df$Status)),"Set1")) + 
+  ggtitle("Distribution of reads") + 
+  xlab("") + 
+  ylab("Reads in millions") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+
+## print
+print(p)
+```
+## genes detected
+
+```{r}
+total.genes <- apply(assays(se)$counts, 2, function(x) {
+    sum(x > 0)
+})
+
+count.df <- as.data.frame(total.genes)
+
+count.df$sampleName <- toupper(rownames(count.df))
+
+count.df$Status <- se$Condition
+count.df$Status <- relevel(factor(count.df$Status), "WT")
+
+## plot
+p <- count.df %>%
+    mutate(sampleName = fct_reorder(sampleName, total.genes, .desc = TRUE)) %>%
+    ggplot(aes(x = sampleName, y = total.genes, fill = Status)) + 
+  geom_bar(stat = "identity",color = "black") + 
+  scale_fill_manual(values = brewer.pal(length(unique(count.df$Status)),"Set1")) + 
+  ggtitle("Numbers og genes detected") + 
+  xlab("") + 
+  ylab("Number of genes detected") +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 5))
+## print
+print(p)
+```
+
+## save se
+```{r}
+## save summarized experiments
+saveRDS(se, file.path(paste0(here()), "results_mouse_Smpd1_ko/summarizedExperiemnts_kpc1050.rds"))
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

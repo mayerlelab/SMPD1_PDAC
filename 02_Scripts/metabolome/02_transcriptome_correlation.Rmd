@@ -1,0 +1,420 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__changes in SM/Cer ratio (Figure 1D)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+# load packages -----------------------------------------------------------
+scriptLibraries <-  c(
+  "GEOquery",
+  "DESeq2",
+  "RColorBrewer",
+  "pheatmap",
+  "limma", 
+  "tidyverse",
+  "here",
+  "ggpubr",
+  "sjPlot",
+  "Biobase",
+  "org.Hs.eg.db",
+  "dendextend",
+  "AnnotationDbi",
+  "GO.db",
+  "ggnewscale"
+)
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_human_transcriptome")),
+       dir.create(file.path(paste0(here()), "results_human_transcriptome")), FALSE)
+
+# set working directory ---------------------------------------------------
+here::here()
+```
+
+# keys
+
+```{r keys}
+p_value <- 0.05
+log_cutoff <- 0.2
+```
+
+## Import GSE71729 data
+
+```{r gse download, results="hide"}
+## Download the CEL files --------------------------------------------------
+dataToDownload <- "GSE71729"
+Sys.setenv(VROOM_CONNECTION_SIZE = 131072*10)
+# load series and platform data from GEO -----------------------------------
+gset <- getGEO(dataToDownload, GSEMatrix =TRUE, getGPL=FALSE)
+if (length(gset) > 1) idx <- grep("GPL6480", attr(gset, "names")) else idx <- 1
+gset <- gset[[idx]]
+
+## Get expression estimates for each array ---------------------------------
+ex <- exprs(gset)
+```
+
+## QC
+
+```{r qc}
+print("Distubution before normalization-------------------------------")
+boxplot(ex)
+norm.ex <- limma::normalizeQuantiles(ex)
+print("Distubution after normalization-------------------------------")
+boxplot(norm.ex)
+```
+
+```{r sample info}
+# group names for all samples ----------------------------------------------
+phenoData <- pData(phenoData(getGEO(
+  dataToDownload)[[1]])) # get ID from phenodata
+phenoData$title <- gsub(".*-", "", phenoData$title) # clean IDs
+# phenoData$title<- gsub("^human pancreatic ", "", phenoData$title) # clean IDs
+
+## subset phenodata and rma for Primary tumor and normal pancreas
+phenoData <- phenoData %>%
+  filter(title == "Pancreas") %>%
+  mutate(status=gsub("tissue type: ", "", characteristics_ch2.1))
+
+p <- norm.ex %>%
+  as.data.frame() %>%
+  add_rownames(var = "Genes") %>%
+  filter(Genes == "SMPD1") %>%
+  sjmisc::rotate_df(cn=TRUE) %>%
+  rownames_to_column("geo_accession") %>%
+  inner_join(phenoData, by = "geo_accession") %>%
+  ggplot(aes(x = status, y = SMPD1, fill = status)) +
+  geom_violin(color="black", show.legend = FALSE) +
+  geom_boxplot(color="black", width = 0.1, show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test",
+                             label = "p",
+                             position = "identity",
+                             ref.group = "Normal",
+                             angle= 0) +
+  xlab("") +
+  ylab("log2(normalized expression)") 
+
+print(p)
+
+p <- norm.ex %>%
+  as.data.frame() %>%
+  add_rownames(var = "Genes") %>%
+  filter(Genes == "SMPD1") %>%
+  sjmisc::rotate_df(cn=TRUE) %>%
+  rownames_to_column("geo_accession") %>%
+  inner_join(phenoData, by = "geo_accession") %>%
+  dplyr::filter(status != "Normal") %>%
+  ggplot(aes(x = `tumor_subtype_0na_1classical_2basal:ch2`, y = SMPD1, fill = `tumor_subtype_0na_1classical_2basal:ch2`)) +
+  geom_violin(color="black", show.legend = FALSE) +
+  geom_boxplot(color="black", width = 0.1, show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test",
+                             label = "p",
+                             position = "identity",
+                             ref.group = "1",
+                             angle= 0) +
+  xlab("") +
+  ylab("log2(normalized expression)") 
+
+print(p)
+
+
+# replace GSM number to column names ----------------------------------------------
+norm.ex <- norm.ex[, colnames(norm.ex) %in% phenoData$geo_accession] 
+
+colnames(norm.ex) <- phenoData$status[match(colnames(norm.ex), phenoData$geo_accession)]
+```
+
+
+# DE analysis
+
+```{r de, results="hide"}
+## DE analysis -------------------------------------------------------------
+title <- as.factor(colnames(norm.ex)) # define groups by clusters
+
+design <- model.matrix(~0+title)
+colnames(design) <- levels(title)
+#design
+
+contr.matrix <- makeContrasts(DEG = Primary - Normal,
+                              levels = design)
+#contr.matrix
+
+lfit <- lmFit(norm.ex, design)
+cfit <- contrasts.fit(lfit, contrasts=contr.matrix)
+efit <- eBayes(cfit, p_value)
+
+summary(decideTests(efit))
+
+tT <- topTable(efit, adjust="fdr", sort.by="B", number=nrow(efit))
+```
+
+## subset data
+
+```{r}
+### select only genes associated with lipidome
+
+## go terms associated with sphingolipids
+go_id <- GOID(GOTERM[grepl("sphingolipid", Term(GOTERM))])
+
+terms <- stack(lapply(mget(go_id, GOTERM, ifnotfound = NA), Term))
+
+# function
+go2genes <- function(x) {
+    for (i in seq_along(x)) {
+        allegs <- try(get(x[[i]], org.Hs.egGO2ALLEGS), silent = TRUE)
+        if (isTRUE(class(allegs) == "try-error")) {
+            return(NULL)
+        } else {
+            return(allegs)
+        }
+    }
+}
+
+out <- unlist(lapply(go_id, go2genes))
+symbol <- unlist(mget(na.omit(out), org.Hs.egSYMBOL, ifnotfound = NA))
+
+lipid.genes <- unique(symbol)
+
+tT <- tT[rownames(tT) %in% lipid.genes,] %>%
+  filter(adj.P.Val < p_value) %>%
+  filter(logFC > log_cutoff | logFC < -log_cutoff)
+
+saveRDS(tT, "./results_human_transcriptome/DGE_table.rds")
+```
+
+# Gene gene correlation
+
+```{r}
+dist.plot.data <- norm.ex %>%
+  as.data.frame() %>%
+  add_rownames("Genes") %>%
+  pivot_longer(-Genes,names_to = "Tissue", values_to = "Expression") %>%
+  mutate(Tissue=gsub("\\..*", "", Tissue))
+
+corr_mat_list <- list()
+
+for (i in unique(dist.plot.data$Tissue)) {
+  norm.ex.sub <- norm.ex[,colnames(norm.ex) ==i]
+  norm.ex.sub <- norm.ex.sub[rownames(norm.ex.sub) %in% rownames(tT),]
+  t.norm.ex.sub <- t(norm.ex.sub)
+  corr_mat <- psych::corr.test(t.norm.ex.sub, 
+                   y = NULL, 
+                   use = "pairwise",
+                   method="pearson",
+                   adjust="fdr", 
+                   alpha=.05,
+                   ci=TRUE,
+                   minlength=5,
+                   normal=FALSE)
+  ## save corr mat
+  corr_mat_list[[i]] <- corr_mat
+}
+```
+
+```{r}
+## plot Primary data
+primary_corr <- corr_mat_list[["Primary"]]
+
+cor_matrix_complete <- primary_corr$r
+
+hc <- hclust(dist(cor_matrix_complete))
+dend <- as.dendrogram(hc)
+gene_names_order <- labels(dend)
+
+num_clusters <- 3
+clusters <- cutree(hc, k = num_clusters)
+clusters <- as.data.frame(clusters) %>%
+  rownames_to_column("genes")
+
+clusters <- clusters[match(gene_names_order, clusters$genes),]
+
+# Plot the dendrogram with cluster colors
+p_dendro <- plot(dend)
+
+# Show the dendrogram
+print(p_dendro)
+
+# Get lower triangle of the correlation matrix
+get_lower_tri<-function(cormat){
+    cormat[upper.tri(cormat)] <- NA
+    return(cormat)
+}
+
+cor_matrix <- cor_matrix_complete[gene_names_order, gene_names_order]
+corr_mat_lower <- get_lower_tri(cor_matrix)
+
+cor_df <- corr_mat_lower %>%
+  reshape2::melt(.,na.rm=TRUE) 
+
+## plot Normal
+normal_corr <- corr_mat_list[["Normal"]]
+
+cor_matrix_norm_complete <- normal_corr$r
+
+# Get upper triangle of the correlation matrix
+get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+}
+
+cor_matrix_norm <- cor_matrix_norm_complete[gene_names_order, gene_names_order]
+corr_mat_upper <- get_upper_tri(cor_matrix_norm)
+
+cor_df1 <- corr_mat_upper %>%
+  reshape2::melt(.,na.rm=TRUE) %>%
+  filter(value != 1)
+
+## plor merged plots
+plot <- ggplot() +
+  geom_tile(data= cor_df,
+            aes(x = Var2, y = Var1, fill = value)) +
+  scale_fill_gradient2(
+  low = "#053061", 
+  mid = "#f7f7f7", 
+  high = "#67001F", 
+  limits = c(-1, 1),
+  name = "Pearson's Correlation \n(PDAC)") +
+  theme(axis.text = element_blank()) +
+  new_scale_fill() + 
+  geom_tile(data= cor_df1,
+            aes(x = Var2, y = Var1, fill = value)) +
+  scale_fill_gradient2(
+  low = "#056509", 
+  mid = "#f7f7f7", 
+  high = "#DF290F", 
+  limits = c(-1, 1),
+  name = "Pearson's Correlation \n(Normal)") +
+  theme_minimal() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  labs(x = "", y = "", fill = "Pearson \ncorrelation") +
+  theme(axis.text = element_blank())
+
+print(plot)
+
+ggsave(filename = "results_human_transcriptome/corelation_heatmap.pdf",
+       plot = plot,
+       width = 7,
+       height = 5,
+       dpi = 300)
+```
+## comparison
+```{r}
+for (i in unique(clusters$clusters)) {
+  banner(i)
+  genes <- clusters$genes[clusters$clusters == i]
+  print(genes)
+  corr_test <- MatrixCorrelation::allCorrelations(dist(cor_matrix_complete[genes, genes]), dist(cor_matrix_norm_complete[genes, genes]), ncomp1=nrow(cor_matrix_complete[genes, genes]), ncomp2=nrow(cor_matrix_norm_complete[genes, genes]))
+  print(corr_test)
+}
+```
+## calculate sphingolipid signature score
+
+```{r}
+library(hacksig)
+library(msigdbr)
+
+norm.ex <- limma::normalizeQuantiles(ex)
+norm.ex <- norm.ex[, colnames(norm.ex) %in% phenoData$geo_accession] 
+tT <- topTable(efit, adjust="fdr", sort.by="B", number=nrow(efit))
+tT <- tT %>%
+  filter(adj.P.Val < p_value) %>%
+  filter(logFC > log_cutoff | logFC < -log_cutoff)
+
+norm.ex <- norm.ex[rownames(norm.ex) %in% rownames(tT),]
+norm.ex <- log2(norm.ex)
+
+kegg_list <- msigdbr(species = "Homo sapiens") %>%
+    distinct(gs_name, gene_symbol) %>%
+    nest(genes = c(gene_symbol)) %>%
+    mutate(genes = purrr::map(genes, purrr::compose(as_vector, unname))) %>%
+    deframe()
+
+kegg_ok <- kegg_list[names(kegg_list) %in% grep(paste(c("_SPHINGOLIPID", "_SPHINGOMYELIN", "_CERAMIDE"), collapse = "|"), names(kegg_list), value = TRUE)]
+
+
+kegg_scores <- map_dfr(list(zscore = "zscore", original= "ssgsea"), 
+                       ~ hack_sig(norm.ex,
+                                  kegg_list[names(kegg_ok)],
+                                  method = .x,
+                                  sample_norm = "separate"),
+                       .id = "method")
+
+kegg_scores <- kegg_scores %>% 
+  dplyr::select(-method) %>%
+    pivot_longer(-sample_id,
+                 names_to = "go_id", 
+                 values_to = "go_score")
+
+kegg_scores_sub <- kegg_scores %>% 
+  inner_join(phenoData, by = c("sample_id"="geo_accession")) %>%
+  mutate(moffitt_classifier = if_else(`tumor_subtype_0na_1classical_2basal:ch2` == "1", "classical",
+                                     if_else(`tumor_subtype_0na_1classical_2basal:ch2` == "2", "basal", NA_character_))) %>%
+  filter(go_id %in% c("REACTOME_TNFR1_MEDIATED_CERAMIDE_PRODUCTION"))
+
+p <- ggplot(kegg_scores_sub,
+       aes(x=source_name_ch2,
+           y=go_score,
+           fill=source_name_ch2)) +
+  #geom_violin(color="black", alpha = 0.5, show.legend = FALSE) +
+  geom_boxplot(color="black", show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21,color = "black", alpha= 0.5, show.legend = FALSE, size = 1) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "wilcox.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "Pancreas_Normal") +
+  xlab("") +
+  ylab("SM signature score") +
+  #facet_wrap(~go_id, ncol = 2) +
+  ylim(c(-2,2))
+
+print(p)
+
+ggsave("results_human_transcriptome/WP_pathway_degradation.pdf",
+       plot = p, 
+       width = 5,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,1334 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko proteome analysis__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "biomaRt",
+  "pheatmap",
+  "UniprotR",
+  "RColorBrewer"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+
+cbind.fill <- function(...){
+    nm <- list(...) 
+    nm <- lapply(nm, as.matrix)
+    n <- max(sapply(nm, nrow)) 
+    data.frame(do.call(cbind, lapply(nm, function (x) 
+        rbind(x, matrix(, n-nrow(x), ncol(x))))))
+    
+}
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_proteome")),
+       dir.create(file.path(paste0(here()), "results_mouse_proteome")), FALSE)
+```
+
+## analyse Whole Proteome data
+```{r}
+p_value_cutoff <- 0.05
+fold_changes_cutoff <- 0.5
+
+##----------------------------------------------------------------
+##                        cell proteome                        --
+##----------------------------------------------------------------
+cells_proteome <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Cell_Lysate (HC)/20240206_171919_HC_Combined/final_data.xlsx") %>%
+  column_to_rownames("Uniprot") 
+
+length(unique(cells_proteome$Gene_name))
+
+##----------------------------------------------------------------
+##                             pca                             --
+##----------------------------------------------------------------
+pca_dat <- cells_proteome %>%
+  dplyr::select(starts_with("LFQ")) 
+
+pca_dat[is.na(pca_dat)] <- 0
+pca_dat <- limma::normalizeVSN(pca_dat)
+
+pca_dat <- pca_dat %>%
+  as.data.frame() %>%
+  sjmisc::rotate_df()
+
+metadata <- data.frame(sample_id=rownames(pca_dat)) %>%
+  mutate(sample_id = gsub("LFQ intensity ", "", sample_id)) %>%
+  separate(sample_id, into = c("matrix", "clone", "replicate"), sep = "_", remove = FALSE) %>%
+  mutate(status = ifelse(clone == "WT", "WT", "SMPD1-KO"))
+
+pca <- prcomp(pca_dat,
+              center = T,
+              .scales = T)
+
+pca_df <- data.frame(pca$x)
+
+pca_df <- bind_cols(pca_df, metadata)
+
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+
+## plot PCA
+p <- ggplot(pca_df, aes(PC1, PC2, fill = clone)) + 
+  geom_point(shape=21,size = 4,color = "black", show.legend = TRUE) + 
+  ggforce::geom_mark_ellipse(geom = "polygon", alpha = 0.25,
+                             color = "gray", lty = "dotted", show.legend = FALSE) + 
+  scale_fill_manual(values = brewer.pal(length(unique(pca_df$clone)),"Set1")) + 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  theme_bw() + 
+  theme(legend.position = "right") +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7","#D1E5F0"))
+
+print(p)
+
+ggsave("results_mouse_proteome/pca_cells.pdf",
+       plot = p, 
+       width = 9,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+##----------------------------------------------------------------
+##                     plot marker proteins                     --
+##----------------------------------------------------------------
+marker_proteins <- cells_proteome %>%
+  rownames_to_column("Uniprot") %>%
+  dplyr::select(Gene_name, Uniprot) %>%
+  filter(Gene_name %in% c("Kras","Tgfbr1", "Tgfbr2", "Vcam1", "Icam1","Egfr","Cav1", "Cav2", "Cltc", "Ap2b1"))
+
+marker_df <- bind_cols(pca_dat, metadata)
+
+for (i in 1:nrow(marker_proteins)) {
+  uniprot <- marker_proteins$Uniprot[i]
+  
+  # temp <- membrane_proteome %>%
+  #   dplyr::select(starts_with("LFQ")) %>%
+  #   sjmisc::rotate_df()
+  
+  temp <- bind_cols(uniprot=pca_dat[[uniprot]], metadata)
+  
+  temp_summary <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    group_by(status) %>%
+    summarise(
+    mean_value = mean(uniprot),
+    sd_value = sd(uniprot)) %>%
+    ungroup()
+  
+  p <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    ggplot(aes(x = status, fill = status)) +
+    geom_bar(aes(y = mean_value), 
+             stat = "identity", position = position_dodge(), width = 0.7, data = temp_summary,
+                color="black", show.legend = FALSE) +
+    geom_errorbar(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value),
+                width = 0.2, position = position_dodge(0.7), data = temp_summary,
+                color="black") +
+    scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+    ggnewscale::new_scale_fill() +
+    geom_jitter(aes(y= uniprot,
+                    fill=clone), shape = 21, size = 3, color = "black", alpha= 0.5) +
+    theme_bw() +
+    scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+    ggpubr::stat_compare_means(aes(y = uniprot),
+                               method = "t.test",
+                              label = "p",
+                              position = "identity",
+                              ref.group = "WT",
+                              angle= 0) +
+    xlab("") +
+    ylab("vsn normalized intensity") +
+    ggtitle(marker_proteins$Gene_name[i])
+  
+  print(p)
+  
+  ggsave(paste0("results_mouse_proteome/total_levels_",marker_proteins$Gene_name[i],".pdf"),
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+}
+
+##----------------------------------------------------------------
+##              signficantly enriched metabolites              --
+##----------------------------------------------------------------
+### cells proteome
+cells_proteome_reg <- cells_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  mutate(direction = if_else(logFC > 0, "up", "down")) %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up, down) %>%
+  rename_with(~paste0("reg_", .), everything())
+
+## exclusive deplete proteins
+cells_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Cell_Lysate (HC)/20240206_171919_HC_Combined/exclusive_proteins_control.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "down") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(down) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+## exclusive enriched proteins
+cells_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Cell_Lysate (HC)/20240206_171919_HC_Combined/exclusive_proteins_treatment.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "up") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+cells_count <- cbind.fill(cells_proteome_reg, cells_proteome_exc_up, cells_proteome_exc_down) %>%
+  pivot_longer(cols = c(reg_up, reg_down, exp_up, exp_down),
+               names_to = "group", values_to = "Gene_name") %>%
+  drop_na(Gene_name) %>%
+  separate(col=group, into = c("type", "direction"), sep = "_", remove = FALSE) %>%
+  group_by(type, direction) %>%
+  summarise(count_n = n()) %>%
+  ungroup() %>%
+  mutate(count_n = ifelse(direction == "down", -1*count_n, count_n),
+         type = relevel(as.factor(type), ref= "reg"))
+
+p <-   ggplot(cells_count, 
+              aes(x = type,
+                y = count_n,
+                fill= direction)) +
+      geom_bar(
+        stat = "identity",
+        color = "black",
+        size = 0.5
+      ) +
+      scale_fill_manual(values = c("#377eb8", "#e41a1c")) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill = NA, size = 1),
+        axis.text = element_text(
+          size = 11,
+          # face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+      labs(
+        x = NULL, y = "Number of proteins with sign. changes"
+      ) +
+      theme(legend.position = "none") +
+      theme(axis.ticks.x = element_blank()) +
+  geom_text(
+    aes(label = count_n, color = direction),
+    vjust = ifelse(cells_count$direction %in% c("up", "ko"), -0.5, 1.5)
+  ) +
+  scale_color_manual(values = c( "#377eb8", "#e41a1c")) +
+  ylim(-400, 600)
+
+print(p) 
+
+ggsave(filename = "results_mouse_proteome/distinct_metabolites.pdf",
+       plot = p,
+       width = 6,
+       height = 5,
+       dpi = 300,
+       units = "cm")
+
+```
+
+
+### pathway analysis
+```{r}
+## bioMart
+ensembl <- useEnsembl(biomart = "ensembl", dataset = "mmusculus_gene_ensembl", mirror = "us")
+
+load(url("http://bioinf.wehi.edu.au/software/MSigDB/mouse_H_v5p2.rdata"))
+
+### cells proteome
+cells_proteome_reg <- cells_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  mutate(direction = if_else(logFC > 0, "up", "down"))
+
+## exclusive deplete proteins
+cells_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Cell_Lysate (HC)/20240206_171919_HC_Combined/exclusive_proteins_control.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "depleted") 
+
+## exclusive enriched proteins
+cells_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Cell_Lysate (HC)/20240206_171919_HC_Combined/exclusive_proteins_treatment.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "enriched") 
+
+gprofiler_list <-list(cells_proteome_reg=cells_proteome_reg, 
+                      cells_proteome_exc_up=cells_proteome_exc_up,
+                      cells_proteome_exc_down=cells_proteome_exc_down) 
+
+gprofiler_res <- list()
+
+for (i in names(gprofiler_list)) {
+  
+  df <- gprofiler_list[[i]]
+  
+  bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = df$Gene_name, mart = ensembl)
+    
+  df$EnsemblID <- bm$ensembl_gene_id[match(df$Gene_name, bm$external_gene_name)]
+  df$EntrezID <- bm$entrezgene_id[match(df$Gene_name, bm$external_gene_name)]
+  
+  for (d in unique(df$direction)) {
+    
+    df_sub <- df[df$direction %in% d,]
+  
+    ens <- pull(df_sub, EnsemblID)
+  
+    # gost query
+    gostres <- gprofiler2::gost(query = ens, 
+                  organism = "mmusculus", 
+                  ordered_query = TRUE,
+                  significant = TRUE,
+                  correction_method = "fdr", 
+                  sources = c("GO", "KEGG", "REAC"), 
+                  exclude_iea = TRUE,
+                  evcodes = TRUE,
+                  user_threshold = 0.01)
+  
+  ## gost results
+  pathway_gostres <- gostres$result
+  
+  ## select only singificant pathways
+  pathway_gostres <- as.data.frame(pathway_gostres[which(pathway_gostres$significant == TRUE), ])
+  
+  list_columns <- sapply(pathway_gostres, is.list)
+  
+  pathway_gostres[list_columns] <- lapply(pathway_gostres[list_columns], 
+                                          function(column) {sapply(column, function(x) 
+                                            paste(unlist(x), collapse = "; "))})
+  
+  write.csv(pathway_gostres, file = paste0("results_mouse_proteome/gProfiler_", i,"_",d, ".csv"))
+  
+  gprofiler_res[[paste0(i,"_",d)]] <- pathway_gostres
+  
+  }
+  
+  
+}
+
+pathways_int <- c(#"protein localization",
+                   #"cellular component",
+                   #"vesicle-mediated transport",
+                   "plasma membrane",
+                   #"cell differentiation",
+                   #"GTPase",
+                   #"cell communication",
+                   "cell polarity",
+                   #"protein tyrosine kinase",
+                   "cell surface receptor",
+                   #"RIG-I",
+                   "protein targeting to membrane",
+                   "lipid catabolic",
+                   "receptor recycling",
+                   "receptor internalization",
+                   #"ERK1",
+                   #"MAPK",
+                   #"epidermal growth factor receptor",
+                   #"GTPase",
+                   "receptor internalization",
+                   #"sphingolipid",
+                   #"ceramide",
+                   #"WNT",
+                   "phosphatidylserine",
+                   "lipid localization"#,
+                   #"ERBB",
+                   #"phosphatidylinositol 3-kinase"
+                   )
+
+# Create an empty list to store results
+result_list <- list()
+# Loop over each data frame in the list and filter rows using grepl
+for (i in names(gprofiler_res)) {
+  # Create a logical vector by checking if any of the terms in pathways_int
+  # are present in the term_name column using grepl
+  matches <- grepl(paste(pathways_int, collapse = "|"), gprofiler_res[[i]]$term_name, ignore.case = TRUE)
+  
+  # Filter the data frame based on the matches
+  filtered_df <- gprofiler_res[[i]][matches, ]
+  
+  # Add a column to identify which data frame the rows came from
+  filtered_df$list_identifier <- i
+  
+  # Append the filtered data frame to the result list
+  result_list[[i]] <- filtered_df
+}
+
+# Combine all filtered data frames into one data frame
+p <- do.call(rbind, result_list) %>%
+  arrange(term_name, p_value) %>%
+  distinct(term_name, .keep_all = TRUE) %>%
+  filter(source != "GO:CC") %>%
+  group_by(list_identifier) %>%
+  arrange(p_value) %>% 
+  slice_head(n = 5) %>%
+  ggplot(aes(x=list_identifier,
+                y=term_name,
+                color=-log10(p_value),
+                size=intersection_size/query_size*100)) +
+  geom_point()
+
+p <- do.call(rbind, result_list) %>%
+  arrange(term_name, p_value) %>%
+  distinct(term_name, .keep_all = TRUE) %>%
+  filter(source != "GO:CC") %>%
+  group_by(list_identifier) %>%
+  arrange(p_value) %>%
+  slice_head(n = 5) %>%
+  ungroup() %>%
+  mutate(list_identifier = sub(".*[^_]_", "", list_identifier),
+         xcolor = ifelse(list_identifier %in% c("down", "depleted"),  "#377eb8", "#e41a1c")) %>%
+  mutate(list_identifier = factor(list_identifier, levels = c("up", "down", "enriched", "depleted"))) %>%
+  # Create a custom factor for term_name, sorted by list_identifier and p_value
+  mutate(term_name = factor(term_name, levels = unique(term_name[rev(order(list_identifier, p_value))]))) %>%
+  ggplot(aes(x = list_identifier,
+             y = term_name,
+             fill = xcolor,
+             size = -log10(p_value))) +
+  geom_point(shape=21,
+             color="black") +
+  geom_vline(xintercept = 2.5) +
+  scale_fill_manual(values = c( "#377eb8", "#e41a1c")) +
+  scale_size_continuous(range = c(2, 12), breaks = c(4,8,12)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) +
+  labs(x="",y="")
+
+
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/pathaway_dotplot.pdf",
+       plot = p, 
+       width = 20,
+       height = 12,
+       dpi = 300,
+       units = "cm")
+
+
+##----------------------------------------------------------------
+##                          hallmarks                          --
+##----------------------------------------------------------------
+df <- cells_proteome
+  
+bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = df$Gene_name, mart = ensembl)
+    
+df$EnsemblID <- bm$ensembl_gene_id[match(df$Gene_name, bm$external_gene_name)]
+df$EntrezID <- bm$entrezgene_id[match(df$Gene_name, bm$external_gene_name)]
+  
+##   gsea
+ranks <- df$logFC
+names(ranks) <- df$EntrezID
+ranks <- ranks[!duplicated(names(ranks))]
+  
+pathways_Mm.h <- Mm.H
+fgseaRes <- fgsea::fgsea(pathways_Mm.h, ranks, minSize = 5)
+  
+topPathways <- fgseaRes %>%
+    as.data.frame() %>%
+    dplyr::arrange(desc(NES)) %>%
+    filter(pval < 0.05) %>%
+    filter(row_number() > max(row_number()) - 8 | row_number() <= 8) %>%
+  pull(pathway)
+  
+## plot gsea
+p <- fgseaRes %>%
+    as.data.frame() %>%
+    dplyr::arrange(desc(NES)) %>%
+    filter(pval < 0.05) %>%
+    filter(row_number() > max(row_number()) - 8 | row_number() <= 8) %>%
+    mutate(NES.col = ifelse(NES > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(pathway = gsub("_", " ", pathway)) %>%
+    mutate(pathway = str_wrap(pathway, width = 20)) %>%
+    ggplot(aes(x = reorder(pathway, NES), y = NES)) + 
+    geom_col(aes(fill = NES.col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "Pathway",
+         y = "Normalized Enrichment Score", 
+         title = "GSEA:hallmarks") +
+    theme_bw() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) + 
+    scale_fill_identity()
+  
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/hallmarks.pdf",
+       plot = p, 
+       width = 12,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+fgsea::plotGseaTable(pathways_Mm.h[topPathways], ranks, fgseaRes, gseaParam = 1)
+
+
+enrichment_set <- fgseaRes[fgseaRes$pathway == "HALLMARK_KRAS_SIGNALING_UP",]
+
+p <- fgsea::plotEnrichment(pathways_Mm.h[[enrichment_set$pathway]],
+               ranks, ticksSize = 0.5) + 
+   labs(title=enrichment_set$pathway) +
+   theme_bw() +
+   annotate("text", x = Inf, y = Inf, hjust = 1.1, vjust = 1.1, 
+            label = paste("P =", signif(enrichment_set$pval, 3), 
+                          "\nNES =", signif(enrichment_set$NES, 3)),
+            size = 4, color = "black") +
+   theme(
+        panel.border = element_rect(colour = "black", fill = NA, size = 1),
+        axis.text = element_text(
+          size = 11,
+          face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+   labs(x = "Rank in order of gene list", y = "Enrichment Score")
+  
+ 
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/hallmarks_gsea.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## analyse Membrane Proteome data
+```{r}
+p_value_cutoff <- 0.05
+fold_changes_cutoff <- 1
+
+##----------------------------------------------------------------
+##                        cell proteome                        --
+##----------------------------------------------------------------
+membrane_proteome <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Membrane_Proteins (HM)/20240207_110611_HM_Combined/final_data.xlsx") %>%
+  column_to_rownames("Uniprot") 
+
+length(unique(membrane_proteome$Gene_name))
+
+##----------------------------------------------------------------
+##                             individual proteins                             --
+##----------------------------------------------------------------
+pca_dat <- membrane_proteome %>%
+  dplyr::select(starts_with("LFQ")) 
+
+pca_dat[is.na(pca_dat)] <- 0
+pca_dat <- limma::normalizeVSN(pca_dat)
+
+pca_dat <- pca_dat %>%
+  as.data.frame() %>%
+  sjmisc::rotate_df()
+
+metadata <- data.frame(sample_id=rownames(pca_dat)) %>%
+  mutate(sample_id = gsub("LFQ intensity ", "", sample_id)) %>%
+  separate(sample_id, into = c("matrix", "clone", "replicate"), sep = "_", remove = FALSE) %>%
+  mutate(status = ifelse(clone == "WT", "WT", "SMPD1-KO"))
+
+pca <- prcomp(pca_dat,
+              center = T,
+              .scales = T)
+
+pca_df <- data.frame(pca$x)
+
+pca_df <- bind_cols(pca_df, metadata)
+
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+
+## plot PCA
+p <- ggplot(pca_df, aes(PC1, PC2, fill = clone)) + 
+  geom_point(shape=21,size = 4,color = "black", show.legend = TRUE) + 
+  ggforce::geom_mark_ellipse(geom = "polygon", alpha = 0.25,
+                             color = "gray", lty = "dotted", show.legend = FALSE) + 
+  scale_fill_manual(values = brewer.pal(length(unique(pca_df$clone)),"Set1")) + 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  theme_bw() + 
+  theme(legend.position = "right") +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7","#D1E5F0"))
+
+print(p)
+
+ggsave("results_mouse_proteome/pca_membrane.pdf",
+       plot = p, 
+       width = 9,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+##----------------------------------------------------------------
+##                     plot marker proteins                     --
+##----------------------------------------------------------------
+marker_proteins <- membrane_proteome %>%
+  rownames_to_column("Uniprot") %>%
+  dplyr::select(Gene_name, Uniprot) %>%
+  filter(Gene_name %in% c("Kras","Tgfbr1", "Tgfbr2", "Vcam1", "Icam1","Egfr","Cav1", "Cav2", "Cltc", "Ap2b1"))
+
+marker_df <- bind_cols(pca_dat, metadata)
+
+for (i in 1:nrow(marker_proteins)) {
+  uniprot <- marker_proteins$Uniprot[i]
+  
+  # temp <- membrane_proteome %>%
+  #   dplyr::select(starts_with("LFQ")) %>%
+  #   sjmisc::rotate_df()
+  
+  temp <- bind_cols(uniprot=pca_dat[[uniprot]], metadata)
+  
+  temp_summary <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    group_by(status) %>%
+    summarise(
+    mean_value = mean(uniprot),
+    sd_value = sd(uniprot)) %>%
+    ungroup()
+  
+  p <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    ggplot(aes(x = status, fill = status)) +
+    geom_bar(aes(y = mean_value), 
+             stat = "identity", position = position_dodge(), width = 0.7, data = temp_summary,
+                color="black", show.legend = FALSE) +
+    geom_errorbar(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value),
+                width = 0.2, position = position_dodge(0.7), data = temp_summary,
+                color="black") +
+    scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+    ggnewscale::new_scale_fill() +
+    geom_jitter(aes(y= uniprot,
+                    fill=clone), shape = 21, size = 3, color = "black", alpha= 0.5) +
+    theme_bw() +
+    scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+    ggpubr::stat_compare_means(aes(y = uniprot),
+                               method = "t.test",
+                              label = "p",
+                              position = "identity",
+                              ref.group = "WT",
+                              angle= 0) +
+    xlab("") +
+    ylab("vsn normalized intensity") +
+    ggtitle(marker_proteins$Gene_name[i])
+  
+  print(p)
+  
+  ggsave(paste0("results_mouse_proteome/membrane_levels_",marker_proteins$Gene_name[i],".pdf"),
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+}
+##----------------------------------------------------------------
+##              signficantly enriched metabolites              --
+##----------------------------------------------------------------
+### membrane proteome
+membrane_proteome_reg <- membrane_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  mutate(direction = if_else(logFC > 0, "up", "down")) %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up, down) %>%
+  rename_with(~paste0("reg_", .), everything())
+
+## exclusive deplete proteins
+membrane_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Membrane_Proteins (HM)/20240207_110611_HM_Combined/exclusive_proteins_control.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "down") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(down) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+## exclusive enriched proteins
+membrane_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Membrane_Proteins (HM)/20240207_110611_HM_Combined/exclusive_proteins_treatment.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "up") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+membrane_count <- cbind.fill(membrane_proteome_reg, membrane_proteome_exc_up, membrane_proteome_exc_down) %>%
+  pivot_longer(cols = c(reg_up, reg_down, exp_up, exp_down),
+               names_to = "group", values_to = "Gene_name") %>%
+  drop_na(Gene_name) %>%
+  separate(col=group, into = c("type", "direction"), sep = "_", remove = FALSE) %>%
+  group_by(type, direction) %>%
+  summarise(count_n = n()) %>%
+  ungroup() %>%
+  mutate(count_n = ifelse(direction == "down", -1*count_n, count_n),
+         type = relevel(as.factor(type), ref= "reg"))
+
+p <-   ggplot(membrane_count, 
+              aes(x = type,
+                y = count_n,
+                fill= direction)) +
+      geom_bar(
+        stat = "identity",
+        color = "black",
+        size = 0.5
+      ) +
+      scale_fill_manual(values = c("#377eb8", "#e41a1c")) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill = NA, size = 1),
+        axis.text = element_text(
+          size = 11,
+          # face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+      labs(
+        x = NULL, y = "Number of proteins with sign. changes"
+      ) +
+      theme(legend.position = "none") +
+      theme(axis.ticks.x = element_blank()) +
+  geom_text(
+    aes(label = count_n, color = direction),
+    vjust = ifelse(cells_count$direction %in% c("up", "ko"), -0.5, 1.5)
+  ) +
+  scale_color_manual(values = c( "#377eb8", "#e41a1c")) +
+  ylim(-500, 500)
+
+print(p) 
+
+ggsave(filename = "results_mouse_proteome/membrane_distinct_metabolites.pdf",
+       plot = p,
+       width = 6,
+       height = 5,
+       dpi = 300,
+       units = "cm")
+
+```
+
+### Subcellular fractions specific protein enrichment
+```{r}
+library(subcellularvis)
+library(furrr) 
+
+### membrane proteome
+membrane_proteome <- membrane_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  rownames_to_column("Uniprot") %>%
+  mutate(direction = if_else(logFC > 0, "up", "down")) %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = direction)
+
+## exclusive deplete proteins
+membrane_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Membrane_Proteins (HM)/20240207_110611_HM_Combined/exclusive_proteins_control.xlsx") %>%
+  mutate(direction = "down")  %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = "depleted") 
+
+## exclusive enriched proteins
+membrane_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Membrane_Proteins (HM)/20240207_110611_HM_Combined/exclusive_proteins_treatment.xlsx") %>%
+  mutate(direction = "up")  %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = "enriched") 
+
+circos_df <- plyr::rbind.fill(list(membrane_proteome, membrane_proteome_exc_down, membrane_proteome_exc_up))
+
+enrich_df <- data_frame()
+
+for (i in unique(circos_df$dataset)) {
+  
+  uniprots <- unique(circos_df[circos_df$dataset == i,]$Uniprot)
+  
+  comps <- compartmentData(uniprots, id_type = "UNIPROT", subAnnots = FALSE,
+                         organism = "Mouse")
+  
+  enrich_df_sub <- comps$enrichment
+  enrich_df_sub$dataset <- i
+  
+  enrich_df <- bind_rows(enrich_df, enrich_df_sub)
+
+}
+
+p <- enrich_df %>%
+  filter(Significant == TRUE) %>%
+  mutate(dataset = factor(dataset, levels = c("up", "down", "enriched", "depleted"))) %>%
+  mutate(Compartment = factor(Compartment, levels = unique(Compartment[rev(order(dataset, FDR))]))) %>%
+  ggplot(aes(x = dataset,
+             y = Compartment,
+             fill = -log10(FDR),
+             size = n)) +
+  geom_point(shape=21,
+             color="black") +
+  geom_vline(xintercept = 2.5) +
+  #scale_fill_manual(values = c( "#377eb8", "#e41a1c")) +
+  scale_size_continuous(range = c(2, 10)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 12),
+        legend.position = "bottom",
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) +
+  labs(x="",y="", size = "Count(sig)", fill = "-log10(adj.P-value)") +
+  scale_fill_gradientn(
+          colours = colorRampPalette(RColorBrewer::brewer.pal(256, "Reds"))(256),
+          limits = c(0, 40),
+          oob = scales::squish) +
+        guides(fill = guide_colourbar(
+          barwidth = unit(3, "cm"),
+          barheight = unit(0.3, "cm"),
+          ticks.colour = "black",
+          frame.colour = "black"
+        )) 
+             
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/Subcelluar_localization_dotplot_membrane_GO.pdf",
+       plot = p, 
+       width = 8,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+
+## get functional annotation...
+uniprot_ids <- enrich_df %>%
+  filter(Compartment == "Plasma membrane") %>%
+  pull(Genes)%>%
+  paste(collapse = ",") %>%    
+  strsplit(split = ",") %>%    
+  unlist()  
+
+# get subcellular localisation
+
+# Setting up parallel processing 
+plan(multisession)  # 
+
+sub_loc_list <- future_map(unique(circos_df$Uniprot), function(i) {
+  tryCatch({
+    GetSubcellular_location(i)
+  }, error = function(e) {
+    NULL  
+  })
+})
+
+sub_loc_list <- sub_loc_list[!sapply(sub_loc_list, is.null)]
+
+# function to clean sub_loc
+extract_membrane_info <- function(text) {
+  # Extract part starting from "Cell membrane"
+  result <- sub(".*(Cell membrane.*)", "\\1", text)
+  # Truncate after the first period
+  result <- sub("\\..*", "", result)
+  ## clean text
+  result <- gsub("\\{.*?\\}", "", result)
+  result <- gsub(" ; ", "; ", result)
+  result <- trimws(result)
+  # Return cleaned result
+  return(result)
+}
+
+# Bind all results together in one go
+sub_loc <- bind_rows(sub_loc_list) %>%
+  filter(grepl("Cell membrane" ,Subcellular.location..CC.)) %>%
+  mutate(subcell_location = sapply(Subcellular.location..CC., extract_membrane_info)) %>%
+  rownames_to_column("Uniprot") %>%
+  dplyr::select(Uniprot, subcell_location) %>%
+  mutate(subcell_location=gsub("^Cell membrane; ", "",subcell_location)) 
+  
+circos_df <- circos_df %>%
+  full_join(sub_loc, by = "Uniprot") %>%
+  dplyr::select(-Gene_name, -Uniprot) %>%
+  drop_na(subcell_location) %>%
+  group_by(direction, dataset, subcell_location) %>%
+  summarise(count_n = n()) %>%
+  ungroup() %>%
+  group_by(dataset) %>%
+  arrange(desc(count_n)) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+## circos plot
+p <- circos_df %>%
+  mutate(dataset = factor(dataset, levels = c("up", "down", "enriched", "depleted"))) %>%
+  # Create a custom factor for term_name, sorted by list_identifier and p_value
+  mutate(subcell_location = factor(subcell_location, levels = unique(subcell_location[rev(order(dataset, count_n))]))) %>%
+  #filter(count_n > 1) %>%
+  ggplot(aes(x = dataset,
+             y = subcell_location,
+             fill = direction,
+             size = count_n)) +
+  geom_point(shape=21,
+             color="black") +
+  geom_vline(xintercept = 2.5) +
+  scale_fill_manual(values = c( "#377eb8", "#e41a1c")) +
+  scale_size_continuous(range = c(2, 6), breaks = c(4,8,12)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) +
+  labs(x="",y="")
+
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/Subcelluar_localization_dotplot_membrane.pdf",
+       plot = p, 
+       width = 13,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+```
+
+
+
+## analyse Surface Proteome data
+```{r}
+p_value_cutoff <- 0.05
+fold_changes_cutoff <- 0.5
+
+##----------------------------------------------------------------
+##                        cell proteome                        --
+##----------------------------------------------------------------
+surface_proteome <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Surface_Proteins (SM)/20240207_124509_SM_Combined/final_data.xlsx") %>%
+  column_to_rownames("Uniprot") 
+
+length(unique(surface_proteome$Gene_name))
+
+##----------------------------------------------------------------
+##                             individual proteins                             --
+##----------------------------------------------------------------
+pca_dat <-surface_proteome %>%
+  dplyr::select(starts_with("LFQ")) 
+
+pca_dat[is.na(pca_dat)] <- 0
+pca_dat <- limma::normalizeVSN(pca_dat)
+
+pca_dat <- pca_dat %>%
+  as.data.frame() %>%
+  sjmisc::rotate_df()
+
+metadata <- data.frame(sample_id=rownames(pca_dat)) %>%
+  mutate(sample_id = gsub("LFQ intensity ", "", sample_id)) %>%
+  separate(sample_id, into = c("matrix", "clone", "replicate"), sep = "_", remove = FALSE) %>%
+  mutate(status = ifelse(clone == "WT", "WT", "SMPD1-KO"))
+
+pca <- prcomp(pca_dat,
+              center = T,
+              .scales = T)
+
+pca_df <- data.frame(pca$x)
+
+pca_df <- bind_cols(pca_df, metadata)
+
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+
+## plot PCA
+p <- ggplot(pca_df, aes(PC1, PC2, fill = clone)) + 
+  geom_point(shape=21,size = 4,color = "black", show.legend = TRUE) + 
+  ggforce::geom_mark_ellipse(geom = "polygon", alpha = 0.25,
+                             color = "gray", lty = "dotted", show.legend = FALSE) + 
+  scale_fill_manual(values = brewer.pal(length(unique(pca_df$clone)),"Set1")) + 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  theme_bw() + 
+  theme(legend.position = "right") +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7","#D1E5F0"))
+
+print(p)
+
+ggsave("results_mouse_proteome/pca_surface.pdf",
+       plot = p, 
+       width = 9,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+##----------------------------------------------------------------
+##                     plot marker proteins                     --
+##----------------------------------------------------------------
+marker_proteins <- surface_proteome %>%
+  rownames_to_column("Uniprot") %>%
+  dplyr::select(Gene_name, Uniprot) %>%
+  filter(Gene_name %in% c("Kras","Tgfbr1", "Tgfbr2", "Vcam1", "Icam1","Egfr","Cav1", "Cav2", "Cltc", "Ap2b1"))
+
+marker_df <- bind_cols(pca_dat, metadata)
+
+for (i in 1:nrow(marker_proteins)) {
+  uniprot <- marker_proteins$Uniprot[i]
+  
+  # temp <- surface_proteome %>%
+  #    dplyr::select(starts_with("LFQ")) %>%
+  #   sjmisc::rotate_df()
+  
+  temp <- bind_cols(uniprot=pca_dat[[uniprot]], metadata)
+  
+  temp_summary <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    group_by(status) %>%
+    summarise(
+    mean_value = mean(uniprot),
+    sd_value = sd(uniprot)) %>%
+    ungroup()
+  
+  p <- temp %>%
+    mutate(status=relevel(as.factor(status), ref="WT")) %>%
+    ggplot(aes(x = status, fill = status)) +
+    geom_bar(aes(y = mean_value), 
+             stat = "identity", position = position_dodge(), width = 0.7, data = temp_summary,
+                color="black", show.legend = FALSE) +
+    geom_errorbar(aes(ymin = mean_value - sd_value, ymax = mean_value + sd_value),
+                width = 0.2, position = position_dodge(0.7), data = temp_summary,
+                color="black") +
+    scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+    ggnewscale::new_scale_fill() +
+    geom_jitter(aes(y= uniprot,
+                    fill=clone), shape = 21, size = 3, color = "black", alpha= 0.5) +
+    theme_bw() +
+    scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+    ggpubr::stat_compare_means(aes(y = uniprot),
+                               method = "t.test",
+                              label = "p",
+                              position = "identity",
+                              ref.group = "WT",
+                              angle= 0) +
+    xlab("") +
+    ylab("vsn normalized intensity") +
+    ggtitle(marker_proteins$Gene_name[i])
+  
+  print(p)
+  
+  ggsave(paste0("results_mouse_proteome/surface_levels_",marker_proteins$Gene_name[i],".pdf"),
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+}
+##----------------------------------------------------------------
+##              signficantly enriched metabolites              --
+##----------------------------------------------------------------
+### cells proteome
+surface_proteome_reg <- surface_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  mutate(direction = if_else(logFC > 0, "up", "down")) %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up, down) %>%
+  rename_with(~paste0("reg_", .), everything())
+
+## exclusive deplete proteins
+surface_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Surface_Proteins (SM)/20240207_124509_SM_Combined/exclusive_proteins_control.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "down") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(down) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+## exclusive enriched proteins
+surface_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Surface_Proteins (SM)/20240207_124509_SM_Combined/exclusive_proteins_treatment.xlsx") %>%
+  column_to_rownames("Uniprot") %>%
+  mutate(direction = "up") %>%
+  #rownames_to_column("Uniprot") %>%
+  spread(.,key = direction, value = Gene_name) %>%
+  dplyr::select(up) %>%
+  rename_with(~paste0("exp_", .), everything())
+
+surface_count <- cbind.fill(surface_proteome_reg, surface_proteome_exc_up, surface_proteome_exc_down) %>%
+  pivot_longer(cols = c(reg_up, reg_down, exp_up, exp_down),
+               names_to = "group", values_to = "Gene_name") %>%
+  drop_na(Gene_name) %>%
+  separate(col=group, into = c("type", "direction"), sep = "_", remove = FALSE) %>%
+  group_by(type, direction) %>%
+  summarise(count_n = n()) %>%
+  ungroup() %>%
+  mutate(count_n = ifelse(direction == "down", -1*count_n, count_n),
+         type = relevel(as.factor(type), ref= "reg"))
+
+p <-   ggplot(surface_count, 
+              aes(x = type,
+                y = count_n,
+                fill= direction)) +
+      geom_bar(
+        stat = "identity",
+        color = "black",
+        size = 0.5
+      ) +
+      scale_fill_manual(values = c("#377eb8", "#e41a1c")) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill = NA, size = 1),
+        axis.text = element_text(
+          size = 11,
+          # face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      geom_hline(yintercept = 0, linetype = "solid", color = "black") +
+      labs(
+        x = NULL, y = "Number of proteins with sign. changes"
+      ) +
+      theme(legend.position = "none") +
+      theme(axis.ticks.x = element_blank()) +
+  geom_text(
+    aes(label = count_n, color = direction),
+    vjust = ifelse(cells_count$direction %in% c("up", "ko"), -0.5, 1.5)
+  ) +
+  scale_color_manual(values = c( "#377eb8", "#e41a1c")) +
+  ylim(-100, 800)
+
+print(p) 
+
+ggsave(filename = "results_mouse_proteome/surface_distinct_metabolites.pdf",
+       plot = p,
+       width = 6,
+       height = 5,
+       dpi = 300,
+       units = "cm")
+
+```
+
+### Subcellular fractions specific protein enrichment
+```{r}
+### membrane proteome
+surface_proteome <- surface_proteome %>%
+  filter(p_mod < p_value_cutoff) %>%
+  filter(logFC >= fold_changes_cutoff | logFC <= -fold_changes_cutoff) %>%
+  rownames_to_column("Uniprot") %>%
+  mutate(direction = if_else(logFC > 0, "up", "down")) %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = direction)
+
+## exclusive deplete proteins
+surface_proteome_exc_down <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Surface_Proteins (SM)/20240207_124509_SM_Combined/exclusive_proteins_control.xlsx") %>%
+  mutate(direction = "down")  %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = "depleted") 
+
+## exclusive enriched proteins
+surface_proteome_exc_up <- readxl::read_excel("../../Data/proteome/Ahmed_Ujjwal_SMPD1_KO/Surface_Proteins (SM)/20240207_124509_SM_Combined/exclusive_proteins_treatment.xlsx") %>%
+  mutate(direction = "up")  %>%
+  dplyr::select(Gene_name, Uniprot, direction) %>%
+  mutate(dataset = "enriched") 
+
+circos_df <- plyr::rbind.fill(list(surface_proteome, surface_proteome_exc_down, surface_proteome_exc_up))
+
+enrich_df <- data_frame()
+
+for (i in unique(circos_df$dataset)) {
+  
+  uniprots <- unique(circos_df[circos_df$dataset == i,]$Uniprot)
+  
+  comps <- compartmentData(uniprots, id_type = "UNIPROT", subAnnots = FALSE,
+                         organism = "Mouse")
+  
+  enrich_df_sub <- comps$enrichment
+  enrich_df_sub$dataset <- i
+  
+  enrich_df <- bind_rows(enrich_df, enrich_df_sub)
+
+}
+
+p <- enrich_df %>%
+  filter(Significant == TRUE) %>%
+  mutate(dataset = factor(dataset, levels = c("up", "down", "enriched", "depleted"))) %>%
+  mutate(Compartment = factor(Compartment, levels = unique(Compartment[rev(order(dataset, FDR))]))) %>%
+  ggplot(aes(x = dataset,
+             y = Compartment,
+             fill = -log10(FDR),
+             size = n)) +
+  geom_point(shape=21,
+             color="black") +
+  geom_vline(xintercept = 2.5) +
+  #scale_fill_manual(values = c( "#377eb8", "#e41a1c")) +
+  scale_size_continuous(range = c(2, 10)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 12),
+        legend.position = "bottom",
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) +
+  labs(x="",y="", size = "Count(sig)", fill = "-log10(adj.P-value)") +
+  scale_fill_gradientn(
+          colours = colorRampPalette(RColorBrewer::brewer.pal(256, "Reds"))(256),
+          limits = c(0, 40),
+          oob = scales::squish) +
+        guides(fill = guide_colourbar(
+          barwidth = unit(3, "cm"),
+          barheight = unit(0.3, "cm"),
+          ticks.colour = "black",
+          frame.colour = "black"
+        )) 
+             
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/Subcelluar_localization_dotplot_surface_GO.pdf",
+       plot = p, 
+       width = 16,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+## get functional annotation...
+uniprot_ids <- enrich_df %>%
+  filter(Compartment == "Plasma membrane") %>%
+  pull(Genes)%>%
+  paste(collapse = ",") %>%    
+  strsplit(split = ",") %>%    
+  unlist()  
+
+# get subcellular localisation
+
+# Setting up parallel processing 
+plan(multisession)  # 
+
+sub_loc_list <- future_map(unique(circos_df$Uniprot), function(i) {
+  tryCatch({
+    GetSubcellular_location(i)
+  }, error = function(e) {
+    NULL  
+  })
+})
+
+sub_loc_list <- sub_loc_list[!sapply(sub_loc_list, is.null)]
+
+# function to clean sub_loc
+extract_membrane_info <- function(text) {
+  # Extract part starting from "Cell membrane"
+  result <- sub(".*(Cell membrane.*)", "\\1", text)
+  # Truncate after the first period
+  result <- sub("\\..*", "", result)
+  ## clean text
+  result <- gsub("\\{.*?\\}", "", result)
+  result <- gsub(" ; ", "; ", result)
+  result <- trimws(result)
+  # Return cleaned result
+  return(result)
+}
+
+# Bind all results together in one go
+sub_loc <- bind_rows(sub_loc_list) %>%
+  filter(grepl("Cell membrane" ,Subcellular.location..CC.)) %>%
+  mutate(subcell_location = sapply(Subcellular.location..CC., extract_membrane_info)) %>%
+  rownames_to_column("Uniprot") %>%
+  dplyr::select(Uniprot, subcell_location) %>%
+  mutate(subcell_location=gsub("^Cell membrane; ", "",subcell_location)) 
+  
+circos_df <- circos_df %>%
+  full_join(sub_loc, by = "Uniprot") %>%
+  dplyr::select(-Gene_name, -Uniprot) %>%
+  drop_na(subcell_location) %>%
+  group_by(direction, dataset, subcell_location) %>%
+  summarise(count_n = n()) %>%
+  ungroup() %>%
+  group_by(dataset) %>%
+  arrange(desc(count_n)) %>%
+  slice_head(n = 10) %>%
+  ungroup()
+
+## circos plot
+p <- circos_df %>%
+  mutate(dataset = factor(dataset, levels = c("up", "down", "enriched", "depleted"))) %>%
+  # Create a custom factor for term_name, sorted by list_identifier and p_value
+  mutate(subcell_location = factor(subcell_location, levels = unique(subcell_location[rev(order(dataset, count_n))]))) %>%
+  #filter(count_n > 1) %>%
+  ggplot(aes(x = dataset,
+             y = subcell_location,
+             fill = direction,
+             size = count_n)) +
+  geom_point(shape=21,
+             color="black") +
+  geom_vline(xintercept = 2.5) +
+  scale_fill_manual(values = c( "#377eb8", "#e41a1c")) +
+  scale_size_continuous(range = c(2, 6), breaks = c(4,8,12)) +
+  theme_bw() +
+  theme(plot.title = element_text(face = "bold", size = 12),
+    legend.position = "bottom", 
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(face = "bold",
+                              size = 12)) +
+  labs(x="",y="")
+
+## print
+print(p)
+  
+ggsave("results_mouse_proteome/Subcelluar_localization_dotplot_surface.pdf",
+       plot = p, 
+       width = 16,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+```
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

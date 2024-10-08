@@ -1,0 +1,846 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (pathway analysis)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR",
+  "pheatmap",
+  "circlize",
+  "RColorBrewer",
+  "KEGGREST",
+  "biomaRt"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+
+.convertHumanGeneList <- function(gene_list){
+  mouse_human_genes =
+    read.csv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",sep="\t")
+  
+  output = c()
+  
+  for(gene in gene_list){
+    class_key = (mouse_human_genes %>% filter(Symbol == gene & Common.Organism.Name=="human"))[['DB.Class.Key']]
+    if(!identical(class_key, integer(0)) ){
+      mouse_genes = (mouse_human_genes %>% filter(DB.Class.Key == class_key & Common.Organism.Name=="mouse, laboratory"))[,"Symbol"]
+      if (length(mouse_genes) != 1) {
+        mouse_genes <- mouse_genes[1]
+      }
+      for(mouse_gene in mouse_genes){
+        output = append(output,mouse_gene)
+      }
+    } else
+      output = append(output, NA)
+  }
+  
+  
+  return (output)
+}
+```
+
+# cells
+
+## load metabolome data
+```{r}
+expData <- readRDS(paste(here(), "results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds", sep = "/"))
+results <- readRDS(paste(here(), "results_metabolome_mm/cells/da_all_data_cells.rds", sep = "/"))
+results_met <- results$summaryFC
+
+results_met$log2FoldChange <- results_met$estimate
+
+data("chemicalMetadata")
+chemicalMetadata <- force(chemicalMetadata)
+
+chemicalMetadata <- chemicalMetadata %>%
+  mutate(across(everything(), as.character))
+
+## define metabolite classes
+columnToSelect <- c("SUPER_PATHWAY", "CHEMICAL_NAME", "KEGG", "MET_CHEM_NO")
+metabolite_class <- chemicalMetadata %>%
+  dplyr::select(any_of(columnToSelect)) %>%
+  separate_rows(KEGG, sep=",") %>%
+  mutate(KEGG=trimws(KEGG))
+
+## load enriched metabolome data
+results_met_kegg <- results_met %>%
+  left_join(metabolite_class, by = c("Metabolite" = "MET_CHEM_NO")) %>%
+  dplyr::rename(keggID =KEGG) %>%
+  drop_na(keggID) %>%
+  distinct()
+```
+
+## load transcriptome data
+```{r}
+confect_list <- readRDS("results_mouse_Smpd1_ko/processed_DE_list_kpc1050.rds")
+gene_list <- readRDS("results_mouse_Smpd1_ko/consensus_gene_list.rds")
+filtered_list <- confect_list[names(confect_list)[grepl("_KO_vs_WT", names(confect_list))]]
+
+results_rna <- filtered_list$KPC1050_KO_vs_WT %>%
+    mutate(confidence = case_when(padj >= 0.01 ~ "not significant", 
+                                  padj < 0.01 & confect >= 0.5 ~ "> 0.5", 
+                                  padj < 0.01 & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5", 
+                                  padj < 0.01 & confect >= 0 & confect < 0.1 ~ "0 - 0.1", 
+                                  padj < 0.01 & confect > -0.1 & confect < 0 ~ "-0.1 - 0", 
+                                  padj < 0.01 & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1", 
+                                  padj < 0.01 & confect <= -0.5 ~ "< -0.5", TRUE ~ NA_character_)) 
+
+## bioMart
+ensembl <- useDataset("mmusculus_gene_ensembl", useMart("ensembl"))
+  
+bm <- getBM(filters = "external_gene_name", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "external_gene_name", "gene_biotype", "description"), values = results_rna$Symbol, mart = ensembl)
+  
+results_rna$EntrezID <- bm$entrezgene_id[match(results_rna$Symbol, bm$external_gene_name)]
+results_rna$EnsemblID <- bm$ensembl_gene_id[match(results_rna$Symbol, bm$external_gene_name)]
+```
+
+## singh kras dependency signature
+```{r}
+
+# singh <- c("MARVELD3","CLDN4","DDR1","TPRG1L","GJB3","RASSF7","ARRDC1","CCDC64B","RAB11FIP1","PKP2","EPS8L1","SOWAHB","SSH3","ST14","MACC1","LPAR2","SH3YL1","LSR","OSBPL2","TMEM139","F2RL1","РКР3","CBIC")
+# 
+# singh_mouse <- .convertHumanGeneList(singh)
+
+kds30 <- read.csv("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kds30_pmid_36852277.csv", 
+                  sep = ";")
+kds30$KDS30 <- scan(text=kds30$KDS30, dec=",", sep=".")
+kds30$Mouse.Gene.ID  <- .convertHumanGeneList(kds30$Gene.ID)
+kds30_genes <- unlist(kds30$Mouse.Gene.ID)
+
+corrected_mat <- readRDS("results_mouse_Smpd1_ko/corrected_matrix_kpc1050.rds") %>%
+  as.data.frame() %>%
+  dplyr::select(-contains("OE"))
+
+corrected_mat <- log2(corrected_mat + 1)
+
+subset <- corrected_mat[rownames(corrected_mat) %in% kds30_genes,]
+
+
+## column annotations
+se <- readRDS("results_mouse_Smpd1_ko/summarizedExperiemnts_kpc1050.rds")
+
+ann <- data.frame(Status = se$Condition,
+                  Clone = se$Clone)
+
+rownames(ann) <- colnames(se)
+
+ann <- ann %>%
+    filter(Status != "OE")
+
+Status.col <- c("#377EB8","#E41A1C")
+names(Status.col) <- unique(ann$Status)
+
+Clone.col <- c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")
+names(Clone.col) <- unique(ann$Clone)
+
+## combo color
+combo.cols <- list(Status = Status.col,
+                     Clone = Clone.col)
+
+# Load the gtools package
+library(gtools)
+
+# Define the desired order
+order_pattern <- c("C1", "C3", "C5", "C6")
+
+# Get the column names that match the pattern
+matching_cols <- grep(paste(order_pattern, collapse="|"), colnames(subset), value=TRUE)
+
+# Sort the columns based on the order pattern
+sorted_df <- subset[, mixedsort(matching_cols)]
+
+
+p <- pheatmap::pheatmap(sorted_df, 
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   cellwidth = 6,
+                   cellheight = 6,
+                   cutree_rows = 4,
+                   border_color = NA,
+                   cluster_rows = TRUE, 
+                   cluster_cols = FALSE,
+                   show_colnames = FALSE)
+
+save_pheatmap_pdf(p,
+                  "results_mouse_Smpd1_ko/Singh_kras.pdf",
+                  width=7,
+                  height=8)
+
+
+
+kds30 <- read.csv("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kds30_pmid_36852277.csv", 
+                  sep = ";")
+kds30$KDS30 <- scan(text=kds30$KDS30, dec=",", sep=".")
+kds30$Mouse.Gene.ID  <- .convertHumanGeneList(kds30$Gene.ID)
+kds30_genes <- unlist(kds30$Mouse.Gene.ID)
+
+mat <- corrected_mat
+
+mat_sub <- mat[rownames(mat) %in% kds30_genes,]
+
+mat_sub <- heatmaply::percentize(mat_sub)
+
+kds30 <- kds30[kds30$Mouse.Gene.ID %in% rownames(mat_sub),]
+
+kds30_r <- data.frame()
+
+for ( i in colnames(mat_sub)) {
+  pcc <- cor.test(mat_sub[[i]], kds30$KDS30)
+  kds30_r <- rbind(kds30_r, data.frame(samples=i,
+                                       kds30=pcc$estimate))
+}
+
+
+kds30_r <- kds30_r %>%
+  as_tibble() %>%
+  column_to_rownames("samples")
+  
+kds30_r <- merge(kds30_r, ann, by = 0)
+
+
+p <- ggplot(kds30_r,
+       aes(x = Status,
+           y= kds30)) +
+  geom_boxplot(aes(fill=Status), color = "black") +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Clone),
+              shape=21,
+              color="black") +
+  ylim(c(-2,2))
+
+print(p)
+```
+
+## integrated network analysis
+```{r}
+p.value.cutoff <- 0.005
+species <- "mmu"
+fold.changes.cutoff <- 2
+network.method <- "diffusion"
+legend.pathway <- 5
+```
+
+## fella
+```{r}
+data("chemicalMetadata")
+chemicalMetadata <- force(chemicalMetadata)
+
+chemicalMetadata <- chemicalMetadata %>%
+  mutate(across(everything(), as.character))
+
+## define metabolite classes
+columnToSelect <- c("SUPER_PATHWAY", "CHEMICAL_NAME", "KEGG", "MET_CHEM_NO")
+metabolite_class <- chemicalMetadata %>%
+  dplyr::select(any_of(columnToSelect)) %>%
+  separate_rows(KEGG, sep=",") %>%
+  mutate(KEGG=trimws(KEGG))
+
+## load enriched metabolome data
+pathDat_met <- results_met %>%
+  dplyr::filter(adj.P.Val < p.value.cutoff) %>%
+  left_join(metabolite_class, by = c("Metabolite" = "MET_CHEM_NO")) %>%
+  dplyr::rename(keggID =KEGG) %>%
+  drop_na(keggID) 
+
+## define direction
+pathDat_met$direction <- ifelse(log2(pathDat_met$logFC) > fold.changes.cutoff, "up",
+                            ifelse(log2(pathDat_met$logFC) < -fold.changes.cutoff, "down",
+                                   "nochange"
+                            ))
+
+## load enriched metabolome data
+pathDat_rna <- results_rna %>%
+  dplyr::filter(confidence != "not significant" ) %>%
+  drop_na(EntrezID)%>%
+  dplyr::rename(geneID =EntrezID) %>%
+  mutate(geneID = as.character(geneID))
+
+
+## identify reference pathways wrt species
+keggTest <- KEGGREST::keggLink("pathway", unique(pathDat_met$keggID))
+keggTest <- data.frame(keggID=names(keggTest), keggPath=keggTest, row.names = NULL)
+keggTest$keggID <- gsub("^.*?:", "", keggTest$keggID)
+keggTest$keggPath <- gsub("path:map", "", keggTest$keggPath)
+
+# identify reference pathways wrt species
+keggRef <- KEGGREST::keggLink("pathway", species)
+keggRef <- data.frame(geneID=names(keggRef), keggPath=keggRef, row.names = NULL)
+# rownamesRef <- names(keggRef)  ## gene ID
+keggRef$keggPath <- gsub(paste0("path:", species), "", keggRef$keggPath)
+keggRef$geneID <- gsub(paste0(species, ":"), "", keggRef$geneID)
+
+
+## create pathway fella data
+pathDatFella <- keggRef %>%
+  inner_join(keggTest, by ="keggPath") %>%
+  inner_join(pathDat_met, by = "keggID") %>%
+  inner_join(pathDat_rna, by = "geneID") 
+
+## filter overview pathways
+graph <- FELLA::buildGraphFromKEGGREST(
+  organism = species,
+  filter.path = NULL
+)
+
+## Cannot be overwritten
+tmpdir <- paste0(tempdir())
+unlink(tmpdir, recursive = TRUE)
+
+## build data from graph
+FELLA::buildDataFromGraph(
+  keggdata.graph = graph,
+  databaseDir = tmpdir,
+  internalDir = FALSE,
+  matrices = network.method,
+  normality = "diffusion",
+  niter = 250
+)
+if (species == "hsa") {
+  alias2entrez <- as.list(org.Hs.eg.db::org.Hs.egSYMBOL2EG)
+} else if (species == "mmu") {
+  alias2entrez <- as.list(org.Mm.eg.db::org.Mm.egSYMBOL2EG)
+}
+
+## get associated pathways
+entrez2ec <- KEGGREST::keggLink("enzyme", species)
+entrez2path <- KEGGREST::keggLink("pathway", species)
+
+## perform FELLA
+fellaData <- FELLA::loadKEGGdata(
+  databaseDir = tmpdir,
+  internalDir = FALSE,
+  loadMatrix = network.method
+)
+
+## get FELLA community
+
+## compound
+idCpd <- FELLA::getCom(fellaData,
+                       level = 5,
+                       format = "id"
+) %>% names()
+## reaction
+idRx <- FELLA::getCom(fellaData,
+                      level = 4,
+                      format = "id"
+) %>% names()
+## enzymes
+idEc <- FELLA::getCom(fellaData,
+                      level = 3,
+                      format = "id"
+) %>% names()
+
+## filtered data
+pathDatFellaFiltered <- pathDatFella
+## define compunds
+cpd <- unique(pathDatFellaFiltered$keggID)
+
+## perform enricment analysis
+analysis <- FELLA::enrich(
+  compounds = cpd,
+  data = fellaData,
+  method = network.method,
+  approx = "t"
+)
+
+## generateResultsGraph
+
+g <- FELLA::generateResultsGraph(
+  object = analysis,
+  data = fellaData,
+  method = network.method
+)
+## define undirected
+unionGraphUndir <- igraph::as.undirected(g, mode = "collapse")
+## create igraph obj
+clp <- igraph::cluster_edge_betweenness(unionGraphUndir)
+
+## obtain matrix properties
+hubscore <- igraph::hub.score(g)$vector
+authscore <- igraph::authority.score(g)$vector
+eigenvalue <- igraph::eigen_centrality(g)$vector
+graph.strength <- igraph::graph.strength(g)
+centrality <- igraph::degree(g) # degree centality
+
+## generate matrix table
+gDf <- as.data.frame(
+  list(
+    Hubscore = hubscore,
+    Authscore = authscore,
+    Eigen = eigenvalue,
+    strength = graph.strength,
+    centrality = centrality
+  ),
+  stringsAsFactors = FALSE
+)
+## define rownames
+gDf$keggPath <- row.names(gDf)
+## add p scores statistics
+pscores <- FELLA::getPscores(
+  object = analysis,
+  method = network.method
+)
+## generateResultsTable
+table <- FELLA::generateResultsTable(
+  object = analysis,
+  data = fellaData,
+  method = network.method
+)
+## p.adjust holm
+table$holm <- p.adjust(table$p.score, method = "holm")
+## p.adjust fdr
+table$FDR <- p.adjust(table$p.score, method = "fdr")
+## merge tables
+colnames(table)[1] <- "keggPath"
+table <- merge(table, gDf, by = "keggPath", all = FALSE)
+## pathway impact
+table.plot <- subset(table, Entry.type %in% c("pathway", "reaction", "module"))
+table.plot$KEGG.name <- gsub(" -.*", "", table.plot$KEGG.name)
+
+## lattice of annotated networks
+clust <- data.frame(cl = clp$membership)
+rownames(clust) <- names(igraph::V(unionGraphUndir))
+clust$desc <- table.plot$KEGG.name[match(rownames(clust), table.plot$keggPath)]
+
+clustr <- clust
+
+## coalesce cluster names
+clust <- clust %>%
+  drop_na() %>%
+  group_by(cl) %>%
+  summarise(desc = paste(desc, collapse = ":")) %>%
+  ungroup()
+
+clust
+
+n <- 1
+pat <- paste0("^([^:]+(?::[^:]+){", n - 1, "}).*")
+clust$desc <- sub(pat, "\\1", clust$desc)
+clust$desc <- gsub(":", "\n", clust$desc)
+
+colors <- colorRampPalette(RColorBrewer::brewer.pal(9, "Set1"))(length(clust$cl))
+colors <- paste0(colors, "50")
+Group <- gl(
+  n = length(clust$cl), 1,
+  labels = clust$desc[clust$cl]
+)
+mark.col <- colors[Group]
+
+pdf("enrichmentNetwork_mets.pdf",
+        width = 9,
+        height = 7
+      )
+
+plot(clp,
+     unionGraphUndir,
+     alpha = 0.5,
+     mark.border = "black",
+     vertex.size = (igraph::V(unionGraphUndir)$input + 0.75) * 5,
+     vertex.label = NA,
+     edge.width=(igraph::E(unionGraphUndir)$weight + 0.75)^2,
+     mark.col = mark.col
+)
+
+
+legend(bty = "n",
+       cex = .8,
+       legend = levels(Group),
+       fill = colors,
+       x="bottom",
+       inset = 0,
+       ncol = 2
+)
+
+dev.off()
+
+```
+
+## plot distribution
+```{r}
+clustr <- clustr %>%
+  rownames_to_column("pathway") %>%
+  filter(grepl("^mmu", pathway))
+
+mat <- expData[["imputed.matrix"]]
+metadata <- expData[["metadata"]]
+
+
+for (cl in unique(clustr$cl)) {
+  print(cl)
+  
+  pathways <- clustr[clustr$cl == cl,]
+  
+  pathwayname <- unlist(pathways$desc)
+  
+  kegg_pathway <- unlist(pathways$pathway)
+  
+  comp_kegg <- c()
+  
+  for (k in kegg_pathway) {
+  
+  ## list reference compounds
+  listReferenceComp <- suppressWarnings(KEGGREST::keggGet(k)[[1]][["COMPOUND"]])
+  compoundID <- names(listReferenceComp)
+  comp_kegg <- append(compoundID, comp_kegg)
+  }
+  
+  subset_chemicalMetadata <- chemicalMetadata[chemicalMetadata$KEGG %in% comp_kegg,,drop = FALSE]
+  
+  df <- mat[, colnames(mat) %in% subset_chemicalMetadata$MET_CHEM_NO,drop = FALSE] %>%
+    rownames_to_column("PARENT_SAMPLE_NAME") %>%
+    full_join(metadata, by = "PARENT_SAMPLE_NAME") %>%
+    group_by(CELL_GENOTYPE) %>%
+    summarise_if(is.numeric, median) %>%
+    ungroup() %>%
+    pivot_longer(!CELL_GENOTYPE, names_to = "metabolite", values_to = "mean_value") %>%
+    mutate(CELL_GENOTYPE = factor(CELL_GENOTYPE, levels=c("WT", "S1KO"))) 
+  
+  df_test <- df %>%
+    rstatix::wilcox_test(mean_value ~ CELL_GENOTYPE) %>%
+    rstatix::adjust_pvalue() %>%
+    rstatix::add_significance("p.adj")
+  
+  p <- df %>%
+    dplyr::select(-metabolite) %>%
+    drop_na(mean_value) %>%
+    group_by(CELL_GENOTYPE) %>%
+    summarise_if(is.numeric, median) %>%
+    ungroup() %>%
+    full_join(df_test, by = c("CELL_GENOTYPE"="group2")) %>%
+    dplyr::select(CELL_GENOTYPE, mean_value, p.adj) %>%
+    mutate(CELL_GENOTYPE = factor(CELL_GENOTYPE, levels = c("WT", "S1KO"))) %>%
+    ggplot(aes(x=CELL_GENOTYPE,
+                y=0,
+                fill=mean_value,
+                size=mean_value)) +
+    geom_point(color="black",
+               shape=21,
+               show.legend = FALSE) +
+    theme_classic() +
+    labs(x="",
+         y="",
+         title = pathwayname) +
+    geom_text(aes(label = p.adj), 
+              size = 5,
+              position = position_nudge(),
+              show.legend = FALSE) +
+    scale_fill_gradientn(
+        colours = rev(RColorBrewer::brewer.pal(5, "RdYlBu"))
+      ) +
+    theme(axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          axis.text.y = element_blank())
+
+  print(p)
+  
+  ggsave(paste0("./results_metabolome_mm/network_clust_",k,".pdf"),
+         plot = p, 
+         width = 6,
+         height = 3,
+         dpi = 300,
+         units = "cm")
+  
+}
+  
+```
+
+## integrated pathway analysis
+
+```{r}
+if (file.exists("/Volumes/ru64waf/Sphingolipids/Scripts/Sphingolipids/keggDB.rds") == FALSE) {
+  ## reference kegg dataset building
+  keggReferences <- KEGGREST::keggLink("pathway", species)
+  referencesPathway <- unique(keggReferences[1:length(keggReferences)])
+  referencesPathway <- gsub("path:", "", referencesPathway)
+  
+  ## empty data-frame
+  keggReferenceDB <- data.frame()
+  
+  ## reference KEGG List
+  
+  for (rp in seq_along(referencesPathway)) {
+    ## selected pathway
+    pathway <- referencesPathway[rp]
+    pathwayName <- KEGGREST::keggGet(pathway)[[1]][["NAME"]]
+    
+    ## list reference compounds
+    listReferenceComp <- suppressWarnings(KEGGREST::keggGet(pathway)[[1]][["COMPOUND"]])
+    compoundID <- names(listReferenceComp)
+    nCompound <- length(compoundID)
+    
+    ## list reference compounds
+    listReferenceGenes <- suppressWarnings(KEGGREST::keggGet(pathway)[[1]][["GENE"]])
+    geneID <- gsub(";.*", "", listReferenceGenes)
+    geneID <- geneID[!is.na(as.numeric(geneID))]
+    nGenes <- length(geneID)
+    
+    ## build dataset
+    keggReferenceDB[rp, "pathway"] <- pathway
+    keggReferenceDB[rp, "pathwayName"] <- pathwayName
+    keggReferenceDB[rp, "compoundID"] <- paste(compoundID, collapse = ",")
+    keggReferenceDB[rp, "geneID"] <- paste(geneID, collapse = ",")
+    keggReferenceDB[rp, "nGenes"] <- nGenes
+  }
+  
+  ## filter non-NA compounds & Genes
+  keggReferenceDB <- keggReferenceDB[keggReferenceDB$nCompound != 0 & keggReferenceDB$nGenes != 0, ]
+  
+  ## save reference kegg dataset
+  keggReferenceDB <- saveRDS(
+    keggReferenceDB,
+    paste("/Volumes/ru64waf/Sphingolipids/Scripts/Sphingolipids/keggDB.rds")
+  )
+} else {
+  ## read reference kegg dataset
+  keggReferenceDB <- readRDS("/Volumes/ru64waf/Sphingolipids/Scripts/Sphingolipids/keggDB.rds")
+}
+
+## define a helper function
+empty_as_na <- function(x){
+    if("factor" %in% class(x)) x <- as.character(x) ## since ifelse wont work with factors
+    ifelse(as.character(x)!="", x, NA)
+}
+
+keggReferenceDB <- keggReferenceDB %>% 
+  mutate_each(funs(empty_as_na)) %>%
+  drop_na(genes) %>%
+  drop_na(compoundID) %>%
+  mutate(pathwayName = gsub("\\ - Mus.*","", pathwayName))
+
+p_value_cutoff <- 0.1
+fold_changes_cutoff <- 0.5
+
+res <- data.frame()
+
+for (path in unique(keggReferenceDB$pathway)) {
+  
+  listed_genes <- unlist(strsplit(keggReferenceDB[keggReferenceDB$pathway == path, "genes"], ","))
+  listed_mets <- unlist(strsplit(keggReferenceDB[keggReferenceDB$pathway == path, "compoundID"], ","))
+  
+  subset_rna <- results_rna %>%
+    dplyr::filter(padj < p_value_cutoff) %>%
+    dplyr::filter(log2FoldChange < -fold_changes_cutoff | log2FoldChange > fold_changes_cutoff) %>%
+    dplyr::select(Symbol, log2FoldChange) %>%
+    dplyr::filter(Symbol %in% listed_genes) %>%
+    dplyr::select(log2FoldChange) %>%
+    as.tibble() 
+  
+  subset_mets <- results_met_kegg %>%
+    dplyr::filter(adj.P.Val < p_value_cutoff) %>%
+    dplyr::filter(log2FoldChange < -fold_changes_cutoff | log2FoldChange > fold_changes_cutoff) %>%
+    dplyr::select(keggID, log2FoldChange) %>%
+    dplyr::filter(keggID %in% listed_mets) %>%
+    dplyr::select(log2FoldChange) %>%
+    as.tibble() 
+  
+  if ((nrow(subset_mets) > 1) && (nrow(subset_rna) > 1)) {
+    
+    
+
+enrichment <- mean(subset_rna$log2FoldChange, na.rm = TRUE) + mean(subset_mets$log2FoldChange, na.rm = TRUE)
+  
+    p_value <- as.numeric(multicross::mcm(list(subset_rna, subset_mets), level = 0.05)[1])
+  
+    q_value <- sqrt(-log10(p_value))
+  
+    res_subset <- data.frame(kegg_id=path,
+                             pathway = keggReferenceDB[keggReferenceDB$pathway == path, "pathwayName"],
+                            enrichment = enrichment,
+                            p_value = p_value,
+                            q_value = q_value)
+  
+    res <- bind_rows(res, res_subset)
+    } 
+}
+
+## tidy res
+kegg_list <- c("mmu04010", "mmu04012", "mmu04014", "mmu04015", "mmu04310", "mmu04330",
+               "mmu04340","mmu04350","mmu04390","mmu04370","mmu04371","mmu04630","mmu04064",
+               "mmu04668","mmu04066","mmu04068","mmu04020","mmu04070","mmu04071","mmu04072",
+               "mmu04024", "mmu04022", "mmu04151", "mmu04152", "mmu04150")
+
+kegg_list_specific <- c("mmu03320", "mmu00600","mmu05200","mmu00190", "mmu00010","mmu04979")
+
+res$group <- ifelse(res$kegg_id %in% kegg_list, "group1", NA)
+
+
+p <- ggplot(res,
+            aes(x=enrichment,
+                y=q_value)) +
+  stat_ellipse(aes(x=enrichment,
+                y=q_value,color=group),type = "t", show.legend=FALSE) +
+  geom_point(aes(fill=ifelse(enrichment < -0.25, "#377EB0", 
+                             ifelse(enrichment > 0.25,"#E41A1C","gray30"))),
+             shape=21,
+             color="black",
+             size=3,
+             show.legend = FALSE) +
+  theme_bw() +
+  geom_hline(yintercept = -log10(p_value_cutoff), linetype = "dashed") +
+  geom_vline(xintercept = -0.2, linetype = "dashed") +
+  geom_vline(xintercept = 0.2,linetype = "dashed") +
+  ggrepel::geom_text_repel(aes(label=ifelse(kegg_id %in% c(kegg_list, kegg_list_specific), pathway, NA)),
+                           max.overlaps = Inf) +
+  scale_fill_manual(values = c("#377EB0","#E41A1C","gray30")) +
+  labs(x="enrichment",
+       y="QVal")
+
+print(p)
+
+
+ggsave("./results_metabolome_mm/enrichment.pdf",
+         plot = p, 
+         width = 9,
+         height = 8,
+         dpi = 300,
+         units = "cm")
+
+```
+
+## ratio of PS vs SMs
+```{r}
+imputed.data <- expData$imputed.matrix %>% 
+  #mutate(across(where(is.numeric), ~replace_na(.,0))) %>%
+  sjmisc::rotate_df()
+
+metadata <- expData[["metadata"]]
+## assign column names
+#colnames(imputed.data) <- metadata$CELL_GENOTYPE
+
+
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  dplyr::mutate(across(everything(), as.character)) %>%
+  dplyr::rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME")) %>%
+  mutate_all(na_if,"") %>%
+  distinct()
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  rownames_to_column("Metabolite") %>%
+  inner_join(metabolite.class, by="Metabolite") %>%
+  filter(SUPER_PATHWAY %in% c("Lipid", "Complex lipids")) %>%
+  filter(grepl("^CER|^SM|-GPS|^cholesterol$",MetaboliteName)) %>%
+  dplyr::mutate(met_group = if_else(grepl("-GPS", MetaboliteName) & SUB_PATHWAY == "Phosphatidylserine (PS)", "PS", 
+                             if_else(grepl("^cholesterol$", MetaboliteName),"Cholesterol",Metabolite))) %>%
+  separate(col=met_group, into = c("Metabolite", "chain_length"), sep = "[(]") %>%
+  dplyr::mutate(chain_length = gsub("[)]", "", chain_length))  %>%
+  filter(Metabolite %in% c("PS", "CER", "SM", "Cholesterol")) %>%
+  distinct() 
+
+
+imputed.data.total <- imputed.data.total %>%
+  #filter(!HMDB %in% c("HMDB0010163")) %>%
+  group_by(Metabolite) %>%
+  summarize_if(is.numeric, funs(mean)) %>%
+  ungroup() %>%
+  sjmisc::rotate_df(cn=TRUE) %>%
+  mutate(ratio=CER/SM,
+         ratio1=PS/Cholesterol) %>%
+  rownames_to_column("PARENT_SAMPLE_NAME") %>%
+  mutate(Status = gsub("\\..*", "", PARENT_SAMPLE_NAME)) %>%
+  inner_join(metadata, by = "PARENT_SAMPLE_NAME")
+
+imputed.data.total$CELL_GENOTYPE <- factor(imputed.data.total$CELL_GENOTYPE,
+                                           levels = c("WT", "S1KO"))
+
+
+
+p <- ggplot(
+  imputed.data.total,
+            aes(x=CELL_GENOTYPE, 
+                  y=ratio1)) +
+  geom_boxplot(aes(fill=CELL_GENOTYPE), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=GROUP_ID),
+                shape = 21,
+               width = 0.4, 
+                color= "black",
+                size=3, 
+                alpha= 0.8) +
+  ggpubr::stat_compare_means(data=imputed.data.total, 
+                       aes(x= CELL_GENOTYPE, 
+                           y=  ratio1), 
+                       label = "..p..",
+                       method = "t.test",
+                       ref.group = "WT",
+                       show.legend = FALSE)  +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Relative PS abundance") 
+
+print(p)
+
+ggsave("./results_metabolome_mm/ps.pdf",
+         plot = p, 
+         width = 8,
+         height = 6,
+         dpi = 300,
+         units = "cm")
+
+
+
+
+```
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

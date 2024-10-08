@@ -1,0 +1,1344 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Significantly altered metabolites (Figure 1A-C)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR",
+  "RColorBrewer",
+  "ggpubr",
+  "rstatix"
+)
+
+#devtools::install_github("umahajanatlmu/metapacR", ref="master", auth_token = "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")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_metapac_vd2")),
+       dir.create(file.path(paste0(here()), "results_metapac_vd2")), FALSE)
+
+save_plot <- function(x, filename, width = 7, height = 7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    svg(filename, width = width, height = height)
+    grid::grid.newpage()
+    grid::grid.draw(x)
+    dev.off()
+}
+```
+
+# untargeted analysis (VD2)
+
+## load data
+
+```{r}
+##----------------------------------------------------------------
+##                     load metabolite data                     --
+##----------------------------------------------------------------
+origData <-
+  readxl::read_xlsx(
+    "../../Data/Metabolome/human/metapac_VD2/ID_VD1_VD2_PLASMA_SERUM_MxP_Metabolomics_Data_2019-08-14_MetaboliteData_MTXH.xlsx",
+    1
+  )
+## only VD2
+origData <- origData[origData$PROJECT_PHASE %in% "VD2",]
+
+origData <- origData %>% 
+  purrr::discard(~sum(is.na(.x))/length(.x)* 100 >=20)
+##----------------------------------------------------------------
+##                      load clinical data                      --
+##----------------------------------------------------------------
+clinData1 <-
+  readxl::read_xlsx("../../Data/Metabolome/human/metapac_VD2/Clinical_data_ID_VD1_VD2_Status_20170427.xlsx", 
+            "samples")
+clinData2 <-
+  readxl::read_xlsx("../../Data/Metabolome/human/metapac_VD2/Clinical_data_ID_VD1_VD2_Status_20170427.xlsx", 
+            "owner")
+##---------------------------------------------------------------
+##                     merge clinical data                     --
+##---------------------------------------------------------------
+clinData <-
+  merge(clinData1,
+        clinData2,
+        all = TRUE,
+        by = "OWNER_ID",
+        sort = FALSE)
+##----------------------------------------------------------------
+##                      merge all datasets                      --
+##----------------------------------------------------------------
+mergeData <-
+  merge(origData,
+        clinData,
+        all = FALSE,
+        by = "ALIQUOT_ID",
+        sort = FALSE)
+##---------------------------------------------------------------
+##                  assign disease categories                  --
+##---------------------------------------------------------------
+mergeData$Disease_short <-
+  ifelse(
+    mergeData$DIAGNOSE == "Blutspender",
+    "Control",
+    ifelse(
+      mergeData$DIAGNOSE == "Control",
+      "NPC",
+      ifelse(
+        mergeData$DIAGNOSE == "Leberzirrhose",
+        "NPC",
+        ifelse(
+          mergeData$DIAGNOSE == "Non-pancreatic control",
+          "NPC",
+          ifelse(
+            mergeData$DIAGNOSE == "Pankreatitis",
+            "CP",
+            ifelse(mergeData$DIAGNOSE == "CP", "CP", "PDAC")
+          )
+        )
+      )
+    )
+  )
+##---------------------------------------------------------------
+##                    clear corrupt columns                    --
+##---------------------------------------------------------------
+colnames(mergeData) <- gsub(".x", "", colnames(mergeData))
+colnames(mergeData) <- gsub(".y", "", colnames(mergeData))
+##---------------------------------------------------------------
+##                  delete duplicated columns                  --
+##---------------------------------------------------------------
+mergeData <- mergeData[, !duplicated(colnames(mergeData))]
+##---------------------------------------------------------------
+##                        clear names                          --
+##---------------------------------------------------------------
+mergeData <- mergeData %>%
+  janitor::clean_names(case = "none")
+## subset for plasma samples
+mergeData <- mergeData[mergeData$MATRIX %in% "Human Plasma",]
+
+## separate metadata and reads
+metadata <- mergeData[, c(1:12,664:774)]
+count.matrix <- mergeData[,!colnames(mergeData) %in% colnames(metadata)]
+
+## imputation and scaling of the data
+imputed.data <- ImputeTransformScale(count.matrix,
+                                     Impute = TRUE,
+                                     Transform = TRUE,
+                                     Scaling = TRUE,
+                                     ScaleType = "Auto")
+
+##----------------------------------------------------------------
+##                     save and export data                     --
+##----------------------------------------------------------------
+expData <- list()
+expData[["count.matrix"]] <- count.matrix
+expData[["metadata"]] <- metadata
+expData[["imputed.matrix"]] <- imputed.data
+
+## save processed data
+saveRDS(expData, "../../Data/Metabolome/processed_data/human_metabolome_combined_ID_VD1_VD2.rds")
+```
+
+## demographics
+
+```{r}
+## project phase
+table <- arsenal::tableby(PROJECT_PHASE ~ Disease_short, data = mergeData)
+table <- as.data.frame(summary(table))
+table[, 1] <- gsub("&nbsp;&nbsp;&nbsp;", "", table[, 1])
+table[, 1] <- gsub("[**]", "", table[, 1])
+table
+```
+
+# normalization
+
+## linear regression
+
+```{r}
+normalized.data <- normalizeDat(expData,
+                                confounders = c("BMI", "AGE", "GENDER", "SAMPLE_STORAGE_TIME"),
+                                reference = "PDAC",
+                                stratifier = "Disease_short")
+```
+
+## Distriubtion plot
+
+```{r}
+dist.data <- normalized.data[["summaryFC"]]
+metabolite.metadata <- read.csv("../../Data/masterTable/masterTableMetaboliteNames.csv")
+dist.data$Metabolite <- as.numeric(gsub("^X", "", dist.data$Metabolite))
+
+dist.data <- dist.data %>%
+  left_join(metabolite.metadata, by=c("Metabolite" = "ID"))
+
+for (i in unique(dist.data$contrast)) {
+  
+  subset <- dist.data[dist.data$contrast %in% i, ]
+  
+  ## significant metabolites
+  subset <- subset[subset$adj.P.Val < 0.01,] %>%
+    drop_na(ONTOLOGY1_NAME) %>%
+    mutate(foldChanges = log2(logFC)) %>%
+    select(contrast, ONTOLOGY1_NAME, logFC) %>%
+    mutate(trend = ifelse(log2(logFC) > 1, "up",
+                          ifelse(log2(logFC) <= -1, "down", "unchanged"))) %>%
+    filter(trend != "unchanged") %>%
+    group_by(contrast, ONTOLOGY1_NAME, trend) %>%
+    summarise(FreqClass = length(trend)) %>%
+    mutate(FreqClass = ifelse(trend == "down", -1*FreqClass, FreqClass)) %>%
+    ungroup() %>%
+    arrange(ONTOLOGY1_NAME) %>%
+  ungroup()
+  
+  
+  
+  ## plot
+  p <- subset %>%
+    ggplot(aes(x= ONTOLOGY1_NAME,
+                  y= FreqClass,
+                  fill = trend)) +
+      geom_bar(stat = "identity",
+               color = "black",
+               size = 0.5) +
+      scale_fill_manual(values=c("#377EB8","#E41A1C")) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill=NA, size=1),
+        axis.text = element_text(
+          size = 11,
+          #face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      geom_hline(yintercept=0, linetype="solid", color = "black") +
+      labs(x=NULL, y="Number of metabolites with sign. changes",
+           title=paste("Alteration in metabolites:", i)) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill=NA, size=1),
+        axis.text = element_text(
+          size = 11,
+          #face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      theme(legend.position='none') +
+      theme(axis.ticks.x = element_blank()) +
+      theme(axis.text.x = element_text(angle = 90,
+                                       vjust = 0.5,
+                                       hjust = 0.95)) 
+  
+  print(p)
+  
+  # sjPlot::save_plot(filename = paste0("./results_metapac_vd2/metabolite_alterationPlots_", i, ".svg"),
+  #                 fig = p,
+  #                 width = 20,
+  #                 height = 18,
+  #                 dpi = 300)
+  
+  ggsave(paste0("./results_metapac_vd2/metabolite_alterationPlots_", i, ".pdf"),
+         plot = p, 
+         width = 20,
+         height = 18,
+         dpi = 300,
+         units = "cm")
+}
+```
+
+## Distribution plot: Lipids only
+
+```{r}
+for (i in unique(dist.data$contrast)) {
+  subset <- dist.data[dist.data$contrast %in% i, ]
+  ## significant metabolites
+  subset <- subset[subset$adj.P.Val < 0.01,] %>%
+    drop_na(ONTOLOGY1_NAME) %>%
+    mutate(foldChanges = log2(logFC)) %>%
+    filter(ONTOLOGY1_NAME == "Complex lipids, fatty acids and related") %>%
+    select(contrast, ONTOLOGY2_NAME, logFC) %>%
+    mutate(trend = ifelse(log2(logFC) > 1, "up",
+                          ifelse(log2(logFC) <= -1, "down", "unchanged"))) %>%
+    filter(trend != "unchanged") %>%
+    group_by(contrast, ONTOLOGY2_NAME, trend) %>%
+    summarise(FreqClass = length(trend)) %>%
+    mutate(FreqClass = ifelse(trend == "down", -1*FreqClass, FreqClass)) %>%
+    ungroup() %>%
+    arrange(ONTOLOGY2_NAME)
+  
+    sphingolipids <- c("Sphingolipids", "Sphingomyelins", "Ceramides")
+    fatty_acids <- c("Fatty acids, branched", "Fatty acids, poly-unsaturated", "Fatty acids, saturated", "Free fatty acids", "Fatty alcohols", "Fatty acids, mono−unsaturated")
+    esters_and_ethers <- c("Ether lipids, cholines", "Ether lipids, ethanolamines", "Cholesterylesters")
+    glycerides <- c("Cholesterol and related", "Diacylglycerols", "Monoacylglycerols", "Triacylglycerols", "Lipid precursors", "Glycolipids")
+    phospholipids <- c("Lysophosphatidylcholines", "Phosphatidylcholines", "Phosphatidylglycerols", "Phospholipid metabolites", "Phosphatidylinositols", "Lysophosphatidylethanolamines", "Phosphatidylserines", "Phosphatidylethanolamines")
+  
+    subset$ONTOLOGY2_NAME <- reorder(subset$ONTOLOGY2_NAME, -subset$FreqClass)
+  
+  ## plot
+  p <- 
+    subset %>%
+    mutate(Lipid_Category = case_when(
+      ONTOLOGY2_NAME %in% sphingolipids ~ "Sphingolipids",
+      ONTOLOGY2_NAME %in% fatty_acids ~ "Fatty Acids",
+      ONTOLOGY2_NAME %in% esters_and_ethers ~ "Esters and Ethers",
+      ONTOLOGY2_NAME %in% glycerides ~ "Glycerides",
+      ONTOLOGY2_NAME %in% phospholipids ~ "Phospholipids",
+      TRUE ~ "Other")) %>%
+    ggplot(aes(x= ONTOLOGY2_NAME,
+               y= FreqClass,
+               fill = trend)) +
+      geom_bar(stat = "identity",
+               color = "black",
+               size = 0.5) +
+      scale_fill_manual(values=c("#377EB8","#E41A1C")) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill=NA, size=1),
+        axis.text = element_text(
+          size = 11,
+          #face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      geom_hline(yintercept=0, linetype="solid", color = "black") +
+      labs(x=NULL, y="Number of metabolites with \nsignificant changes",
+           title=paste("Alteration in metabolites:", i)) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black", fill=NA, size=1),
+        axis.text = element_text(
+          size = 11,
+          #face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      theme(legend.position='none') +
+      theme(axis.ticks.x = element_blank()) +
+      theme(axis.text.x = element_text(angle = 90,
+                                       vjust = 0.5,
+                                       hjust = 0.95)) +
+    facet_grid(.~Lipid_Category, scales = "free_x")
+  print(p)
+  
+  # sjPlot::save_plot(filename = paste0("./results_metapac_vd2/metabolite_alterationPlots_Lipids_", i, ".svg"),
+  #                 fig = p,
+  #                 width = 20,
+  #                 height = 18,
+  #                 dpi = 300)
+  
+    ggsave(paste0("./results_metapac_vd2/metabolite_alterationPlots_Lipids_", i, ".pdf"),
+         plot = p, 
+         width = 18,
+         height = 15,
+         dpi = 300,
+         units = "cm")
+}
+```
+
+## Pie chart
+
+```{r}
+## prepare data
+datPie <- dist.data %>%
+    filter(adj.P.Val < 0.01) %>%
+    drop_na(ONTOLOGY1_NAME) %>%
+    group_by(contrast, ONTOLOGY1_NAME) %>%
+    summarise(Freq = length(ONTOLOGY1_NAME)) %>%
+    arrange(ONTOLOGY1_NAME)%>%
+  ungroup()
+
+  groups <- unique(datPie$contrast)
+
+  ## colors
+  colorsOntologyOne <-
+    data.frame(
+      ONTOLOGY1_NAME = unique(datPie$ONTOLOGY1_NAME),
+      color = colorRampPalette(brewer.pal(8, "Set1"))(length(
+        unique(datPie$ONTOLOGY1_NAME)))
+    )
+  ## match colors
+  matchColumnColors <-
+    match(datPie$ONTOLOGY1_NAME,
+          colorsOntologyOne$ONTOLOGY1_NAME,
+          nomatch = 0)
+  datPie$color <- c("")
+  datPie$color[datPie$ONTOLOGY1_NAME %in%
+                     colorsOntologyOne$ONTOLOGY1_NAME] <-
+    as.character(colorsOntologyOne$color)[matchColumnColors]
+
+ ## plot Pie plots
+
+  for (i in groups) {
+
+    filteredData <- datPie[datPie$contrast %in% i,]
+
+    ## plot
+    p <- filteredData %>%
+      mutate(alpha = ifelse("Complex lipids, fatty acids and related" %in% ONTOLOGY1_NAME, 1, 0.5)) %>%
+      ggplot(aes(x = "", y = Freq)) +
+      geom_bar(
+        aes(fill = ONTOLOGY1_NAME),
+        width = 0.05,
+        stat = "identity",
+        color = "black",
+        linetype ="dotted"
+        
+      ) +
+      coord_polar("y", start = 0) +
+      scale_fill_manual(values = filteredData$color) +
+      scale_alpha_manual(values = filteredData$alpha) +
+      theme_void() +
+      labs(title = paste("Distribution of Metabolites:",
+                         i)) +
+      theme(
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5)
+      ) +
+      guides(fill = guide_legend(ncol = 3),
+             alpha = "none") +
+      theme(plot.margin = unit(c(1, 1, 1, 1),
+                               "lines")) 
+    
+    print(p)
+    # 
+    # sjPlot::save_plot(filename = paste0("./results_metapac_vd2/metabolite_alteration_venn_", i, ".svg"),
+    #               fig = p,
+    #               width = 18,
+    #               height = 15,
+    #               dpi = 300)
+    
+    ggsave(paste0(paste0("./results_metapac_vd2/metabolite_alteration_venn_", i, ".pdf")),
+         plot = p, 
+         width = 18,
+         height = 15,
+         dpi = 300,
+         units = "cm")
+    
+    
+  }
+```
+
+## CER/SM ratio
+
+```{r}
+chains <- c("C14", "C16", "C18", "C20", "C22", "C24", "C26")
+imputed.data <- expData[["imputed.matrix"]] %>%
+  sjmisc::rotate_df()
+metadata <- expData[["metadata"]]
+## assign column names
+colnames(imputed.data) <- metadata$Disease_short
+
+gm_mean <- function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  add_rownames("Metabolite") %>%
+  mutate(Metabolite = as.numeric(gsub("^X", "", Metabolite))) %>%
+  left_join(metabolite.metadata, by=c("Metabolite" = "ID")) %>%
+  filter(ONTOLOGY1_NAME == "Complex lipids, fatty acids and related") %>%
+  filter(ONTOLOGY2_NAME == "Ceramides" | ONTOLOGY2_NAME == "Sphingomyelins") %>%
+  filter(grepl("^CER_|^SM_",METABOLITE_NAME)) %>%
+  filter(grepl("d18:1,",METABOLITE_NAME))  %>%## only d18:1
+  filter(grepl(paste(chains, collapse = "|"),METABOLITE_NAME))  %>%
+  group_by(ONTOLOGY2_NAME) %>%
+  summarize_if(is.numeric, funs(mean)) %>%
+  select(-Metabolite,-UNIQUE_ANALYTE_ID,-DICT_STRUCTURE_ELUCIDATION_ID) %>%
+  summarize_if(is.numeric, funs(.[ONTOLOGY2_NAME == "Ceramides"] / .[ONTOLOGY2_NAME == "Sphingomyelins"])) %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("Disease") %>%
+  mutate(Disease = gsub("\\..*", "", Disease)) %>%
+  filter(Disease != "CP") %>%
+  rename(ratio = V1) %>%
+  ungroup()
+
+stat.test <- imputed.data.total %>% 
+ wilcox_test(ratio ~ Disease) %>%
+  add_xy_position(
+          x = "Disease",
+          step.increase = 0.15
+        )
+
+p <- ggplot(imputed.data.total,
+            aes(x=Disease,
+                y=ratio,
+                fill=Disease)
+            ) +
+  geom_violin(show.legend = FALSE) +
+  geom_jitter(
+          shape = 21,
+          size = 2,
+          width = 0.2,
+          color = "black",
+          alpha = 0.3,
+          show.legend = FALSE
+        ) +
+  geom_boxplot(show.legend = FALSE, width = 0.2) +
+  stat_pvalue_manual(
+          y = 3,
+          stat.test,
+          label = "p",
+          tip.length = 0.01,
+          color = "gray50",
+          size = 4,
+          bracket.size = 0.6,
+          inherit.aes = FALSE
+        ) +
+  xlab("") +
+  ylab("CER/SM ratio") +
+  theme_bw() +
+  theme(
+    axis.line = element_line(size = 0.5),
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  ) +
+  scale_fill_manual(values=c("#377EB8","#E41A1C")) +
+  expand_limits(y=3.5) +
+  scale_y_continuous(trans = scales::log10_trans(),
+    breaks = scales::trans_breaks("log10", function(x) 10^x),
+    labels = scales::trans_format("log10", scales::math_format(10^.x))) 
+
+print(p)
+
+# sjPlot::save_plot(filename = paste0("./results_metapac_vd2/CER_SM_ratio.svg"),
+#                   fig = p,
+#                   width = 8,
+#                   height = 7,
+#                   dpi = 300)
+
+ggsave("./results_metapac_vd2/CER_SM_ratio.pdf",
+         plot = p, 
+         width = 8,
+         height = 7,
+         dpi = 300,
+         units = "cm")
+
+##----------------------------------------------------------------
+##                      chain length plot                      --
+##----------------------------------------------------------------
+imputed.data.chain <- imputed.data %>%
+  add_rownames("Metabolite") %>%
+  mutate(Metabolite = as.numeric(gsub("^X", "", Metabolite))) %>%
+  left_join(metabolite.metadata, by=c("Metabolite" = "ID")) %>%
+  filter(ONTOLOGY1_NAME == "Complex lipids, fatty acids and related") %>%
+  filter(ONTOLOGY2_NAME == "Ceramides" | ONTOLOGY2_NAME == "Sphingomyelins") %>%
+  filter(grepl("^CER_|^SM_",METABOLITE_NAME)) %>%
+  filter(grepl("d18:1,",METABOLITE_NAME))  %>%## only d18:1
+  filter(grepl(paste(chains, collapse = "|"),METABOLITE_NAME))  %>%
+  mutate(METABOLITE_NAME2 = gsub(".*,", "", METABOLITE_NAME)) %>%
+  mutate(METABOLITE_NAME2 = gsub(")", "", METABOLITE_NAME2, fixed=TRUE)) %>%
+  group_by(METABOLITE_NAME2) %>%
+  select(-Metabolite,-UNIQUE_ANALYTE_ID,-DICT_STRUCTURE_ELUCIDATION_ID) %>%
+  summarize_if(is.numeric, funs(.[ONTOLOGY2_NAME == "Ceramides"] / .[ONTOLOGY2_NAME == "Sphingomyelins"])) %>%
+  pivot_longer(!METABOLITE_NAME2, names_to = "Disease", values_to = "ratio")%>%
+  mutate(Disease = gsub("\\..*", "", Disease)) %>%
+  filter(Disease != "CP") %>%
+  ungroup()
+
+stat.test <- imputed.data.chain %>%
+  group_by(METABOLITE_NAME2) %>%
+  wilcox_test(ratio ~ Disease) %>%
+  add_significance() %>%
+  mutate(p.signif=ifelse(p.signif == "ns", NA_character_, p.signif)) %>%
+  select(METABOLITE_NAME2, group2, p.signif)%>%
+  rename(Disease = group2) %>%
+  ungroup()
+
+## dot plot
+df <- imputed.data.chain %>%
+  group_by(Disease) %>%
+  mutate(cell_exp_ct = ifelse(ratio > quantile(ratio, 0.25), ratio, NA_integer_)) %>%
+  group_by(METABOLITE_NAME2, Disease) %>%
+  summarise(count = mean(ratio),
+            cell_ct = n(),
+            cell_exp_ct =  sum(!is.na(cell_exp_ct))
+      ) %>%
+  ungroup()
+
+
+summary.data <- imputed.data.chain %>%
+  arrange(desc(Disease)) %>%
+  group_by(METABOLITE_NAME2) %>%
+  summarize(fold_change=ratio[1] / ratio[2]) %>%
+  ungroup() %>%
+  arrange(desc(fold_change)) %>%
+  mutate(Disease="PDAC") %>%
+  right_join(df, by = c("METABOLITE_NAME2", "Disease")) %>%
+  #replace(is.na(.), 1) %>%
+  ungroup() %>%
+  left_join(stat.test, by = c("METABOLITE_NAME2", "Disease"))
+
+    
+    
+METABOLITE_NAME2s <- summary.data$METABOLITE_NAME2 %>% unique()
+    
+## row dendrogram
+mat.row <- summary.data %>%
+  filter(METABOLITE_NAME2 %in% METABOLITE_NAME2s) %>%
+  dplyr::select(Disease, METABOLITE_NAME2, count) %>%
+  pivot_wider(names_from = Disease, values_from = count) %>%
+  column_to_rownames("METABOLITE_NAME2") %>%
+  as.matrix() %>%
+  dist() %>%
+  replace(is.na(.), 0) %>%
+  replace(is.infinite(.), 0)
+    
+## create clusters
+clust.row <- hclust(mat.row)
+    
+## create dendrogram
+ddgram.row <- as.dendrogram(clust.row)
+
+## plot  dendrogram
+p.row <- ggtree::ggtree(ddgram.row)
+      
+## cloumn dendrogram
+mat.col <- summary.data %>%
+  filter(METABOLITE_NAME2 %in% METABOLITE_NAME2s) %>%
+  dplyr::select(Disease, METABOLITE_NAME2, count) %>%
+  pivot_wider(names_from = METABOLITE_NAME2, values_from = count) %>%
+  column_to_rownames("Disease") %>%
+  as.matrix() %>%
+  dist() %>%
+  replace(is.na(.), 0) %>%
+  replace(is.infinite(.), 0)
+    
+## create clusters
+clust.col <- hclust(mat.col)
+    
+## create dendrogram
+ddgram.col <- as.dendrogram(clust.col)
+    
+p.col <- ggtree::ggtree(ddgram.col) + ggtree::layout_dendrogram()
+    
+#p.col <- ggtree::ggtree(ddgram.col) + ggtree::layout_dendrogram()
+    
+p.dot.com <- summary.data %>%
+  filter(METABOLITE_NAME2 %in% METABOLITE_NAME2s) %>%
+  mutate(METABOLITE_NAME2 = factor(METABOLITE_NAME2,
+                                   levels = clust.row$labels[clust.row$order])) %>%
+  mutate(Disease = factor(Disease,
+                          levels = clust.col$labels[clust.col$order])) %>%
+  mutate(perc_exprn = (cell_exp_ct/cell_ct) * 100) %>% 
+  ggplot() +
+  geom_point(aes(x= Disease,
+                 y = METABOLITE_NAME2,
+                 color = count,
+                 size = perc_exprn)) +
+  theme_bw() +
+  scale_color_gradientn(colours = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                           oob = scales::squish,
+                           name = 'Relative \nexpression') +
+  labs(x="", y="", size="Relative \nabundence(%)") +
+  guides(colour = guide_colourbar(barwidth = unit(0.2, "cm"),
+                                      ticks.colour = "black",
+                                      frame.colour = "black"),
+         alpha="none") +
+  theme(axis.text.x = element_text(angle = 90,
+                                       hjust = 1,
+                                       vjust = 0.5),
+            axis.ticks = element_blank()) +
+  scale_y_discrete(position = "right") +
+  geom_text(aes(x= Disease,
+                 y = METABOLITE_NAME2,
+                label=p.signif),
+            size=3,
+            face = "bold")
+
+p.bar.com <- summary.data %>%
+  filter(METABOLITE_NAME2 %in% METABOLITE_NAME2s) %>%
+  mutate(METABOLITE_NAME2 = factor(METABOLITE_NAME2,
+                                   levels = clust.row$labels[clust.row$order])) %>%
+  mutate(Disease = factor(Disease,
+                          levels = clust.col$labels[clust.col$order])) %>%
+  mutate(perc_exprn = (cell_exp_ct/cell_ct) * 100) %>% 
+  mutate(color=ifelse(fold_change > 1, "#377EB8","#E41A1C")) %>%
+  drop_na(fold_change) %>%
+  ggplot() +
+  geom_bar(aes(x= METABOLITE_NAME2,
+                 y = fold_change,
+                 fill = color),
+           position="dodge", 
+           stat="identity",
+           color="black",
+           size= 0.5,
+           show.legend = FALSE) +
+  scale_y_continuous(expand = c(1,0)) +
+  coord_flip() +
+  theme_classic() +
+  theme(
+    axis.line = element_line(size = 0.5),
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold"),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank()
+  ) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(2, "Set1")) +
+  xlab("")+
+  ylab("relative changes to control") 
+    
+p.dot = patchwork::plot_spacer() +
+  patchwork::plot_spacer() +
+  p.col +
+  p.bar.com +
+  p.row +
+  p.dot.com +
+  patchwork::plot_layout(ncol = 3,
+                             widths = c(0.3,0.1,0.2),
+                             height = c(1,3,3))
+
+print(p.dot)
+
+# sjPlot::save_plot(filename = paste0("./results_metapac_vd2/d18_1_SM_CER_ratio_VD2.svg"),
+#                   fig = p.dot,
+#                   width = 15,
+#                   height = 12
+#                   )
+
+ggsave("./results_metapac_vd2/d18_1_SM_CER_ratio_VD2.pdf",
+         plot = p.dot, 
+         width = 15,
+         height = 12,
+         dpi = 300,
+         units = "cm")
+```
+
+# pathway analysis
+
+## DAS
+
+```{r}
+species <- "hsa"
+common.mets <- 15
+
+p.value.cutoff <- 0.01
+## read reference kegg dataset
+keggReferenceDB <- readRDS("../../Data/masterTable/keggReferenceDB.rds")
+## tidy reference list
+keggReferenceDBList <- keggReferenceDB %>%
+  dplyr::select(pathway, pathwayName, compoundID) %>%
+  separate_rows(compoundID) 
+
+## length of compounds  
+nCompoundkeggReferenceDBList <- length(unique(keggReferenceDBList$compoundID))
+
+## load enriched data
+pathDat <- dist.data %>%
+  filter(adj.P.Val < 0.01)
+ 
+# add names
+pathDat$keggID <- pathDat$KEGG_ID
+  
+## define direction
+pathDat$direction <- ifelse(log2(pathDat$logFC) > 1, "up",
+                              ifelse(log2(pathDat$logFC) < -1, "down",
+                                     "nochange"))
+
+## identify pathways associated with obtained metabolites
+packages <- c("FELLA", "ggtree", "KEGGREST", "ropls")
+
+installScriptLibs(packages)
+
+keggTest <-keggLink("pathway",sort(unique(pathDat$keggID)))
+rownames <- names(keggTest)
+keggTest <- as.data.frame(gsub("path:map","",keggTest))
+rownames<- gsub("^.*?:","",rownames)
+keggTest <- cbind(rownames, keggTest)
+names(keggTest) <- c("keggID", "keggPath")
+
+## identify reference pathways wrt species
+
+keggRef <- keggLink("pathway", species)
+# rownamesRef <- names(keggRef)  ## gene ID
+keggRef <- as.data.frame(gsub(paste0("path:",species),"",keggRef))
+# rownamesRef <- gsub("^.*?:","",rownamesRef) ## gene ID
+# keggRef <- cbind(rownamesRef, keggRef) ## gene ID
+names(keggRef) <- c("keggPath")
+
+## Merge two datasets
+
+keggDf <- keggTest[keggTest$keggPath %in% keggRef$keggPath, ]
+keggDf$keggPath <- paste0(species, keggDf$keggPath)
+
+## select pathway dataset
+pathDatDas <- keggDf %>%
+    full_join(pathDat, by="keggID") %>%
+    group_by(contrast, keggPath) %>%
+    mutate(direction = ifelse(log2(logFC) > 1, "positive",
+                              ifelse(log2(logFC) < -1, "negative",
+                                     "nochange"))) %>%
+    filter(direction != "nochange") %>%
+    select(contrast, keggPath, direction) %>%
+    drop_na() %>%
+    mutate(count = n()) %>%
+    data.table::dcast(contrast + keggPath ~ direction, value.var="count") %>%
+    replace(is.na(.),0) %>%
+    ##  more than 15 metabolites in common
+    filter((positive + negative) > common.mets) %>%
+    mutate(das=(positive - negative) /
+             (positive + negative))
+
+  ## create pathway annotations
+
+  ## empty dataframe
+  annotation <- data.frame()
+  for (i in seq_along(unique(pathDatDas$keggPath))) {
+    ## select kegg pathway name
+    keggPath <- keggGet(pathDatDas$keggPath[i])
+    ## add name to annotations
+    annotation[i,"keggPath"] <- unname(keggPath[[1]]$ENTRY)
+    annotation[i,"keggName"] <- unname(gsub("\\ - .*","",keggPath[[1]]$NAME))
+    ## create class
+    if (is.null(keggPath[[1]]$CLASS)) {
+      annotation[i,"class"] <- unname(gsub("\\ - .*","",keggPath[[1]]$NAME))
+    } else
+      annotation[i,"class"] <- unname(gsub("^.*?; ","",keggPath[[1]]$CLASS))
+
+  }
+  ## join annotation data-frame with pathway data
+  pathDatDas <-pathDatDas %>%
+    full_join(annotation, by="keggPath")
+
+  # ## add ceramides and sphigomylins subclass
+  # subclass <- keggTest %>%
+  #   mutate(subclass = ifelse(keggID %in% "C00195", "Cer",
+  #                            ifelse(keggID %in% "C00550",
+  #                                   "SMs", NA))) %>%
+  #   mutate(keggPath = paste0(species, keggPath)) %>%
+  #   select(keggPath, subclass) %>%
+  #   unique()
+  # ##----------------------------------------------------------------
+  # ##       join class/subclass data-frame with pathway data       --
+  # ##----------------------------------------------------------------
+  # pathDatDas <-pathDatDas %>%
+  #   full_join(subclass, by="keggPath") %>%
+  #   mutate(colors = ifelse(class == "Lipid metabolism", "#e41a1c",
+  #                          ifelse(class == "Amino acid metabolism", "#377eb8", "gray"))) %>%
+  #   drop_na(.,any_of(c("Subtype","keggName")))
+
+  ## differential abundance score
+
+  ## select groups
+  groups <- unique(pathDatDas$contrast)
+
+  for (j in seq_along(groups)) {
+    ## filtered dataset
+    datFiltered <- pathDatDas[pathDatDas$contrast %in% groups[j],]  %>%
+      arrange(keggName)
+    ## plot
+    p <- datFiltered %>%
+      drop_na(keggName) %>%
+      ggplot(aes(x=keggName, y=das)) +
+      geom_segment(
+        aes(xend=keggName, yend=0, fill= das),
+        width=0.15, alpha = 0.5) +
+      geom_point(aes(size = (positive + negative),
+                     fill = das), shape=21) +
+      geom_hline(yintercept=0, lty=1) +
+      labs(fill= "DAS",
+           size= "Pathway size",
+           x= "",
+           y= "Differential Abundance score",
+           title = paste0(groups[j])) +
+      # geom_text(aes(label=subclass,
+      #               fontface= "bold"),
+      #           size=3,
+      #           hjust=-1) +
+      theme_bw() +
+      theme(
+        panel.border = element_rect(colour = "black",
+                                    fill=NA,
+                                    size=1),
+        axis.text = element_text(
+          size = 11,
+          #face = "bold",
+          colour = "black"
+        ),
+        axis.title = element_text(size = 12, face = "bold")
+      ) +
+      scale_fill_gradientn(colours = colorRampPalette(rev(brewer.pal(256, "RdBu")))(256),
+                           limits = c(-1,1),
+                           oob = scales::squish,
+                           name = 'DAS') +
+      guides(fill = guide_colourbar(barwidth = unit(0.3, "cm"),
+                                    ticks.colour = "black",
+                                    frame.colour = "black")) +
+      theme(axis.text.x = element_text(size=8)) +
+      coord_flip() +
+      scale_y_continuous(limits = c(-1, 1))
+    
+    print(p)
+    
+    # sjPlot::save_plot(filename = paste0("./results_metapac_vd2/pathway_analysis_", gsub(" ", "", groups[j], fixed = TRUE), ".svg"),
+    #               fig = p,
+    #               width = 20,
+    #               height = 15,
+    #               dpi = 300)
+    
+    ggsave(paste0("./results_metapac_vd2/pathway_analysis_", gsub(" ", "", groups[j], fixed = TRUE), ".pdf"),
+         plot = p.dot, 
+         width = 20,
+         height = 15,
+         dpi = 300,
+         units = "cm")
+  }
+```
+
+## KEGG
+
+```{r}
+## tidy reference list
+  keggReferenceDBList <- keggReferenceDB %>%
+    select(pathway, pathwayName, compoundID) %>%
+    separate_rows(compoundID)
+
+  ## length of compounds
+  nCompoundkeggReferenceDBList <- length(unique(keggReferenceDBList$compoundID))
+
+
+  ## duplicate metabolite id listing in test dataset
+  metaboliteOccurances <- data.frame(table(
+    pathDat$keggID))
+
+  colnames(metaboliteOccurances) <- c("keggID", "Freq")
+
+  dupliMetaboliteOccurances <- metaboliteOccurances[
+    metaboliteOccurances$Freq > 1,]
+
+
+
+  ## number of kegg listed metabolites
+
+  nKeggIdList <- length(na.omit(pathDat$keggID))
+  dupliMetaboliteOccurances$Percent <- dupliMetaboliteOccurances$Freq/
+    nKeggIdList *100
+
+  ##  balance reference dataset for duplicate IDs in test dataset
+
+  for (jj in 1:nrow(keggReferenceDB)) {
+
+    (keggReferenceDB[jj,"nCompoundAdjusted"] <-  keggReferenceDB[jj,"nCompound"])
+
+    for( iii in 1:nrow(dupliMetaboliteOccurances)) {
+
+      keggID <- dupliMetaboliteOccurances[iii, "keggID"]
+
+      if (keggID %in% unlist(strsplit(keggReferenceDB[jj,"compoundID"], ","))) {
+
+        count <- length(unlist(
+          strsplit(
+            keggReferenceDB[jj,"compoundID"], ","))) +
+          ((nCompoundkeggReferenceDBList*dupliMetaboliteOccurances[iii,"Percent"])/
+             100)
+        keggReferenceDB[jj,"nCompoundAdjusted"] <- as.numeric(round(count))
+      }
+    }
+  }
+  ## balance unique reference dataset count
+  nCompoundkeggReferenceDBListAdjusted <- nCompoundkeggReferenceDBList
+  for (ii in 1:nrow(dupliMetaboliteOccurances)) {
+    nCompoundkeggReferenceDBListAdjusted <- round(nCompoundkeggReferenceDBListAdjusted  + ((
+      nCompoundkeggReferenceDBListAdjusted*dupliMetaboliteOccurances[ii,"Percent"])/
+        100))
+  }
+
+  ## load enriched data
+  enrichDat <- pathDat
+  ## define groups
+  groups <- unique(enrichDat$contrast)
+
+  ## enrichement pathway
+  enrichment.results <- data.frame()
+
+  for (i in seq_along(groups)) {
+    ## create empty data-frame
+    enrichTableUp <- data.frame()
+    enrichTableDown <- data.frame()
+    ## filtered data by group
+    enrichDatFiltered <- enrichDat[enrichDat$contrast %in% groups[i],]
+    ## remove missing KeggIDs
+    enrichDatFiltered <- enrichDatFiltered[!is.na(enrichDatFiltered$keggID),]
+    ## subset data by direction
+    enrichDatFilteredUp <- enrichDatFiltered[enrichDatFiltered$direction == "up",]
+    enrichDatFilteredDown <- enrichDatFiltered[enrichDatFiltered$direction == "down",]
+    ## define reference data
+    keggReferenceDBDirection <- keggReferenceDB
+    ## get adjusted list
+    keggReferenceDBDirection$nCompoundkeggReferenceDBListAdjusted <- nCompoundkeggReferenceDBListAdjusted
+    ## select non-negative data
+    if (nrow(enrichDatFilteredUp) != 0 && nrow(enrichDatFilteredDown) != 0 ){
+      ## list direction data
+      dfList <- list(enrichDatFilteredUp,  enrichDatFilteredDown)
+      for (list in dfList) {
+        ## calculate expected metabolite count
+        listedMetabolite <- unique(list$keggID)
+        ## length of metabolite
+        keggReferenceDBDirection[["nListedMetabolite"]] <-
+          length(listedMetabolite)
+        ## create expected compound
+        keggReferenceDBDirection <- keggReferenceDBDirection %>%
+          mutate(expectedCompound = (nCompoundAdjusted*  nListedMetabolite)/nCompoundkeggReferenceDBListAdjusted)
+        ## create empty data frame
+        keggReferenceDBDirection[["nCompoundFC"]] <- 0
+        ## count number of metabolites
+        for (j in seq_along(listedMetabolite)) {
+          ## select metabolite
+          metabolite <- listedMetabolite[j]
+          ## create keggReferenceDBDirection
+          for (k in 1:nrow(keggReferenceDBDirection)) {
+
+            if (metabolite %in% unlist(strsplit(keggReferenceDBDirection[k,"compoundID"], ","))) {
+              keggReferenceDBDirection[k, "nCompoundFC"] <- keggReferenceDBDirection[k, "nCompoundFC"] + 1
+            }
+          }
+        }
+        ## calculate enrichment
+        for (l in 1:nrow(keggReferenceDBDirection)) {
+          ## define matrix
+          a <- keggReferenceDBDirection[l,"nCompoundFC"]
+          b <- keggReferenceDBDirection[l,"nCompoundAdjusted"] - a
+          c <- keggReferenceDBDirection[l,"nListedMetabolite"] - a
+          d <- keggReferenceDBDirection[l,"nCompoundkeggReferenceDBListAdjusted"] - a-b-c
+          ## create matrix
+          fischerMatrix <- matrix(c(a,b,c,d), nrow = 2)
+          ## perform fischer exact
+          pValue <- fisher.test(fischerMatrix, alternative = "greater")$p.value
+          ## adjust p-values
+          pValueAdjusted <- p.adjust(pValue, method = "BH")
+          ## calculate enrichment
+          pathwayEnrichment <- keggReferenceDBDirection[l,"nCompoundFC"] /
+            keggReferenceDBDirection[l,"expectedCompound"]
+          ## save results as as up or down-regulated pathway
+          if (length(na.omit(list$direction)) == 0) {
+            next
+          }
+          if (unique(list$direction)=="up") {
+            enrichTableUp[l,"pathway"] <- keggReferenceDBDirection[l,"pathway"]
+            enrichTableUp[l,"pathwayName"] <- gsub("\\ - .*","", keggReferenceDBDirection[l,"pathwayName"])
+            enrichTableUp[l,"enrichment"] <- pathwayEnrichment
+            enrichTableUp[l,"pValue"] <- pValue
+            enrichTableUp[l,"adjPValueFDR"] <- pValueAdjusted
+            enrichTableUp[l,"direction"] <-  "up"
+          } else if (unique(list$direction)=="down") {
+            enrichTableDown[l,"pathway"] <- keggReferenceDBDirection[l,"pathway"]
+            enrichTableDown[l,"pathwayName"] <- gsub("\\ - .*","", keggReferenceDBDirection[l,"pathwayName"])
+            enrichTableDown[l,"enrichment"] <- pathwayEnrichment
+            enrichTableDown[l,"pValue"] <- pValue
+            enrichTableDown[l,"adjPValueFDR"] <- pValueAdjusted
+            enrichTableDown[l,"direction"] <-  "down"
+          }
+        }
+      }
+    } else if (nrow(enrichDatFilteredUp) != 0 ) {
+      dfList <- enrichDatFilteredUp
+      ## calculate expected metabolite count
+      listedMetabolite <- unique(dfList$keggID)
+      ## length of metabolite
+      keggReferenceDBDirection[["nListedMetabolite"]] <-
+        length(listedMetabolite)
+      ## create expected compound
+      keggReferenceDBDirection <- keggReferenceDBDirection %>%
+        mutate(expectedCompound = (nCompoundAdjusted*  nListedMetabolite)/nCompoundkeggReferenceDBListAdjusted)
+      ## create empty data frame
+      keggReferenceDBDirection[["nCompoundFC"]] <- 0
+      ## count number of metabolites
+      for (j in seq_along(listedMetabolite)) {
+        ## select metabolite
+        metabolite <- listedMetabolite[j]
+        ## create keggReferenceDBDirection
+        for (k in 1:nrow(keggReferenceDBDirection)) {
+
+          if (metabolite %in% unlist(strsplit(keggReferenceDBDirection[k,"compoundID"], ","))) {
+
+            keggReferenceDBDirection[k, "nCompoundFC"] <- keggReferenceDBDirection[k, "nCompoundFC"] + 1
+
+          }
+        }
+      }
+      ## calculate enrichment
+      for (l in 1:nrow(keggReferenceDBDirection)) {
+        ## define matrix
+        a <- keggReferenceDBDirection[l,"nCompoundFC"]
+        b <- keggReferenceDBDirection[l,"nCompoundAdjusted"] - a
+        c <- keggReferenceDBDirection[l,"nListedMetabolite"] - a
+        d <- keggReferenceDBDirection[l,"nCompoundkeggReferenceDBListAdjusted"] - a-b-c
+        ## create matrix
+        fischerMatrix <- matrix(c(a,b,c,d), nrow = 2)
+        ## perform fischer exact
+        pValue <- fisher.test(fischerMatrix, alternative = "greater")$p.value
+        ## adjust p-values
+        pValueAdjusted <- p.adjust(pValue, method = "BH")
+        ## calculate enrichment
+        pathwayEnrichment <- keggReferenceDBDirection[l,"nCompoundFC"] /
+          keggReferenceDBDirection[l,"expectedCompound"]
+        ## save results as as up-regulated pathways
+        enrichTableUp[l,"pathway"] <- keggReferenceDBDirection[l,"pathway"]
+        enrichTableUp[l,"pathwayName"] <- gsub("\\ - .*","", keggReferenceDBDirection[l,"pathwayName"])
+        enrichTableUp[l,"enrichment"] <- pathwayEnrichment
+        enrichTableUp[l,"pValue"] <- pValue
+        enrichTableUp[l,"adjPValueFDR"] <- pValueAdjusted
+        enrichTableUp[l,"direction"] <-  "up"
+      }
+
+    } else if (nrow(enrichDatFilteredDown) != 0 ) {
+      dfList <- enrichDatFilteredDown
+      ## calculate expected metabolite count
+      listedMetabolite <- unique(dfList$keggID)
+      ## length of metabolite
+      keggReferenceDBDirection[["nListedMetabolite"]] <-
+        length(listedMetabolite)
+      ## create expected compound
+      keggReferenceDBDirection <- keggReferenceDBDirection %>%
+        mutate(expectedCompound = (nCompoundAdjusted*  nListedMetabolite)/nCompoundkeggReferenceDBListAdjusted)
+      ## create empty data frame
+      keggReferenceDBDirection[["nCompoundFC"]] <- 0
+      ## count number of metabolites
+      for (j in seq_along(listedMetabolite)) {
+        ## define metabolite
+        metabolite <- listedMetabolite[j]
+        ## create keggReferenceDBDirection
+        for (k in 1:nrow(keggReferenceDBDirection)) {
+
+          if (metabolite %in% unlist(strsplit(keggReferenceDBDirection[k,"compoundID"], ","))) {
+            keggReferenceDBDirection[k, "nCompoundFC"] <- keggReferenceDBDirection[k, "nCompoundFC"] + 1
+          }
+        }
+      }
+      ## calculation of enrichment
+      for (l in 1:nrow(keggReferenceDBDirection)) {
+        ## select metabolite
+        a <- keggReferenceDBDirection[l,"nCompoundFC"]
+        b <- keggReferenceDBDirection[l,"nCompoundAdjusted"] - a
+        c <- keggReferenceDBDirection[l,"nListedMetabolite"] - a
+        d <- keggReferenceDBDirection[l,"nCompoundkeggReferenceDBListAdjusted"] - a-b-c
+        ## create matrix
+        fischerMatrix <- matrix(c(a,b,c,d), nrow = 2)
+        ## perform fischer exact
+        pValue <- fisher.test(fischerMatrix, alternative = "greater")$p.value
+        ## adjust p-values
+        pValueAdjusted <- p.adjust(pValue, method = "BH")
+        ## calculate enrichement
+        pathwayEnrichment <- keggReferenceDBDirection[l,"nCompoundFC"] /
+          keggReferenceDBDirection[l,"expectedCompound"]
+        ## save results as as up-regulated pathways
+        enrichTableDown[l,"pathway"] <- keggReferenceDBDirection[l,"pathway"]
+        enrichTableDown[l,"pathwayName"] <- gsub("\\ - .*","", keggReferenceDBDirection[l,"pathwayName"])
+        enrichTableDown[l,"enrichment"] <- pathwayEnrichment
+        enrichTableDown[l,"pValue"] <- pValue
+        enrichTableDown[l,"adjPValueFDR"] <- pValueAdjusted
+        enrichTableDown[l,"direction"] <-  "down"
+      }
+    }
+    ## merge data
+    enrichTable <- rbind(enrichTableUp, enrichTableDown)
+
+    if (nrow(enrichTable) == 0) {
+      next
+    } else if (nrow(enrichTable[enrichTable$pValue < p.value.cutoff,]) != 0 ) {
+      ## tidy enrichTable
+      enrichTable <- enrichTable %>%
+        filter(pValue < p.value.cutoff) %>%
+        mutate(enrichment = ifelse(direction == "down", -enrichment, enrichment))
+
+      enrichTable$pathway <- paste0(enrichTable$pathway, "-",
+                                    enrichTable$direction)
+      enrichTable$contrast <- groups[i]
+      ## save enrichTable
+      enrichment.results <- bind_rows(enrichment.results, enrichTable)
+      ## plot
+      p <- enrichTable %>%
+        mutate(pathway = gsub("\\-.*", "", pathway)) %>%
+        dplyr::select(pathway, pathwayName, enrichment, direction, contrast) %>%
+        group_by(pathway) %>%
+        summarise(n = n(), across()) %>%
+        mutate(enrichment = case_when(n == 2 ~ (enrichment[match("up", direction)] + enrichment[match("down", direction)]), TRUE ~ enrichment)) %>%
+        dplyr::select(-direction) %>%
+        distinct() %>%
+        mutate(direction = case_when(
+          enrichment > 0 ~ "up",
+          enrichment < 0 ~ "down",
+          enrichment == 0 ~ "nochange"
+        )) %>%
+        ungroup() %>%
+        arrange(desc(enrichment)) %>%
+        ggplot(aes(
+          x = reorder(pathwayName, enrichment, FUN = sum),
+          y = enrichment,
+          group = direction,
+          fill = direction
+        )) +
+        geom_bar(stat = "identity", color = "black", size = 0.25) +
+        theme_bw() +
+        theme(
+          panel.border = element_rect(
+            colour = "black",
+            fill = NA,
+            size = 1
+          ),
+          axis.text = element_text(size = 11,
+                                   #face = "bold",
+                                   colour = "black"),
+          axis.title = element_text(size = 12, face = "bold")
+        ) +
+        coord_flip() +
+        theme(legend.position = "none") +
+        xlab("KEGG pathways") +
+        ylab("Enrichment score") +
+        ggtitle(paste0("Enriched pathways:", groups[i])) +
+        scale_fill_manual(values = c(up = "#E41A1C", down = "#377EB8"))
+      
+      print(p)
+      
+      # sjPlot::save_plot(
+      #   filename = paste0(
+      #     "./results_metapac_vd2/kegg_pathway_analysis_",
+      #     gsub(" ", "", groups[i], fixed = TRUE),
+      #     ".svg"
+      #   ),
+      #   fig = p,
+      #   width = 25,
+      #   height = 30,
+      #   dpi = 300
+      # )
+      ggsave(paste0("./results_metapac_vd2/kegg_pathway_analysis_",gsub(" ", "", groups[i], fixed = TRUE),".pdf"),
+         plot = p, 
+         width = 25,
+         height = 30,
+         dpi = 300,
+         units = "cm")      
+
+      
+      ## plot
+      p1 <- enrichTable %>%
+        mutate(pathway = gsub("\\-.*", "", pathway)) %>%
+        dplyr::select(pathway, pathwayName, enrichment, direction, contrast) %>%
+        group_by(pathway) %>%
+        summarise(n = n(), across()) %>%
+        mutate(enrichment = case_when(n == 2 ~ (enrichment[match("up", direction)] + enrichment[match("down", direction)]), TRUE ~ enrichment)) %>%
+        dplyr::select(-direction) %>%
+        distinct() %>%
+        mutate(direction = case_when(
+          enrichment > 0 ~ "up",
+          enrichment < 0 ~ "down",
+          enrichment == 0 ~ "nochange"
+        )) %>%
+        ungroup() %>%
+        arrange(desc(enrichment)) %>%
+        filter(row_number() > max(row_number()) -10 |
+                 row_number() <= 10) %>%
+        ggplot(aes(
+          x = reorder(pathwayName, enrichment, FUN = sum),
+          y = enrichment,
+          group = direction,
+          fill = direction
+        )) +
+        geom_bar(stat = "identity", color = "black", size = 0.25) +
+        theme_bw() +
+        theme(
+          panel.border = element_rect(
+            colour = "black",
+            fill = NA,
+            size = 1
+          ),
+          axis.text = element_text(size = 11,
+                                   #face = "bold",
+                                   colour = "black"),
+          axis.title = element_text(size = 12, face = "bold")
+        ) +
+        coord_flip() +
+        theme(legend.position = "none") +
+        xlab("KEGG pathways") +
+        ylab("Enrichment score") +
+        ggtitle(paste0("Enriched pathways:", groups[i])) +
+        scale_fill_manual(values = c(up = "#E41A1C", down = "#377EB8"))
+      
+      print(p1)
+      
+      # sjPlot::save_plot(
+      #   filename = paste0(
+      #     "./results_metapac_vd2/kegg_pathway_analysis_top_hits_",
+      #     gsub(" ", "", groups[i], fixed = TRUE),
+      #     ".svg"
+      #   ),
+      #   fig = p1,
+      #   width = 25,
+      #   height = 30,
+      #   dpi = 300
+      # )
+      
+      ggsave(paste0("./results_metapac_vd2/kegg_pathway_analysis_top_hits_",gsub(" ", "", groups[i], fixed = TRUE),".pdf"),
+         plot = p1, 
+         width = 15,
+         height = 10,
+         dpi = 300,
+         units = "cm")
+      
+    }
+  }
+```
+# cohort description
+```{r}
+df <- mergeData %>%
+  dplyr::select(Disease_short,GENDER, AGE,  BMI, UICC_TUMOR_CLASSIFICATION, METASTASES, CA_19_9, HBA1C, BILIRUBIN, ALBUMIN,ANTIDEPRESSIVA) %>%
+  dplyr::filter(Disease_short != "CP") %>%
+  gtsummary::tbl_summary(by = Disease_short,
+              missing = "no") %>% 
+  gtsummary::add_n() %>%
+  gtsummary::bold_labels() %>% 
+  gtsummary::as_flex_table() 
+
+df
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

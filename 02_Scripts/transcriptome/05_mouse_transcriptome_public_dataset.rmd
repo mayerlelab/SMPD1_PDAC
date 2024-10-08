@@ -1,0 +1,370 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__murine transcriptome (Mueller et al 2018)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "tidyverse",
+  "ggpubr",
+  "patchwork",
+  "scales",
+  "here")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_mouse_Smpd1_public")),
+       dir.create(file.path(paste0(here()), "results_mouse_Smpd1_public")), FALSE)
+```
+```{r}
+.convertHumanGeneList <- function(gene_list){
+  mouse_human_genes =
+    read.csv("http://www.informatics.jax.org/downloads/reports/HOM_MouseHumanSequence.rpt",sep="\t")
+  
+  output = c()
+  
+  for(gene in gene_list){
+    class_key = (mouse_human_genes %>% filter(Symbol == gene & Common.Organism.Name=="human"))[['DB.Class.Key']]
+    if(!identical(class_key, integer(0)) ){
+      mouse_genes = (mouse_human_genes %>% filter(DB.Class.Key == class_key & Common.Organism.Name=="mouse, laboratory"))[,"Symbol"]
+      if (length(mouse_genes) != 1) {
+        mouse_genes <- mouse_genes[1]
+      }
+      for(mouse_gene in mouse_genes){
+        output = append(output,mouse_gene)
+      }
+    } else
+      output = append(output, NA)
+  }
+  
+  
+  return (output)
+}
+```
+
+## retrieve dataset
+
+```{r}
+mueller <- readxl::read_excel("../../Data/transcriptome/mouse_public_rad/BlindTransformedDataMatrix_2018-02-05_mod2.xlsx")
+
+mueller_metadata <- readxl::read_excel("../../Data/transcriptome/mouse_public_rad/_DS40-samples_Chr4-Chr6-and-Cdkn2a-status_27_Ujjwal-Kras.xlsx")
+  
+mueller <- mueller %>%
+  column_to_rownames("ENSEMBLID") %>% 
+  group_by(GeneName) %>% 
+  summarise_if(is.numeric, mean) %>%
+  as_tibble() %>%
+  column_to_rownames("GeneName") %>%
+  ungroup()
+
+kds30 <- read.csv("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kds30_pmid_36852277.csv", 
+                  sep = ";")
+kds30$KDS30 <- scan(text=kds30$KDS30, dec=",", sep=".")
+kds30$Mouse.Gene.ID  <- .convertHumanGeneList(kds30$Gene.ID)
+kds30_genes <- unlist(kds30$Mouse.Gene.ID)
+
+mat <- mueller
+
+mat_sub <- mat[rownames(mat) %in% kds30_genes,]
+
+mat_sub <- heatmaply::percentize(mat_sub)
+
+kds30 <- kds30[kds30$Mouse.Gene.ID %in% rownames(mat_sub),]
+
+kds30_r <- data.frame()
+
+for ( i in colnames(mat_sub)) {
+  pcc <- cor.test(mat_sub[[i]], kds30$KDS30)
+  kds30_r <- rbind(kds30_r, data.frame(ID=i,
+                                       kds30=pcc$estimate))
+}
+
+kds30_r <- kds30_r %>%
+  as_tibble() %>%
+  mutate(ID = gsub("_PPT$", "", ID))
+
+mueller <- mueller %>%
+  rownames_to_column("GeneName") %>%
+  dplyr::filter(GeneName %in% c("Kras", "Smpd1")) %>%
+  column_to_rownames("GeneName") %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("ID") %>%
+  mutate(ID = gsub("_PPT$", "", ID)) %>%
+  left_join(kds30_r, by = "ID") %>%
+  left_join(mueller_metadata, by = "ID") %>%
+  filter(FinalExpressionSubclustering != "Outlier")
+
+mueller$FinalExpressionSubclusters <- factor(mueller$FinalExpressionSubclusters,
+                                             levels = c("C2", "C1"))
+
+# p <- ggplot(mueller, 
+#             aes(x=log2(Smpd1),
+#              y=`KrasUMI*KrasRatio-cDNA`,
+#              fill= FinalExpressionSubclusters)) +
+#     geom_smooth(method = "lm", 
+#                 formula = y ~ x,
+#                 se=FALSE, 
+#                 size=2,
+#                 aes(color= FinalExpressionSubclusters),
+#                 show.legend = FALSE) +
+#     geom_point(aes(fill = FinalExpressionSubclusters),shape= 21, color = "black", size = 3,
+#                 show.legend = FALSE) +
+#     ggpubr::stat_cor() +
+#     theme_bw() +
+#     scale_fill_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+#     scale_color_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+#     theme(axis.title  = element_text(face = "italic")) +
+#     facet_wrap(~FinalExpressionSubclusters, ncol = 2, scales = "free_x")
+
+p <- ggplot(mueller, 
+            aes(x=Smpd1,
+             y=`mut Kras expression [qPCR]`)) +
+    geom_smooth(method = "lm", 
+                formula = y ~ x,
+                se=FALSE, 
+                size=2,
+                show.legend = FALSE,
+                color="gray") +
+    geom_point(aes(fill = FinalExpressionSubclusters),shape= 21, color = "black", size = 3,
+                show.legend = FALSE) +
+    ggpubr::stat_cor() +
+    theme_bw() +
+    scale_fill_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+    scale_color_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+    scale_y_continuous(trans="log2", labels = label_log(2), limits = c(16,512)) +
+    theme(axis.title  = element_text(face = "italic")) +
+    labs(x="Relative Smpd1 Expression [UMI]",
+         y="Kras G12D Expression [AU]")
+
+p_x <- ggplot(mueller, 
+            aes(x=FinalExpressionSubclusters,
+             y=Smpd1,
+             fill=FinalExpressionSubclusters)) +
+    geom_boxplot(color="black", show.legend = FALSE) +
+    theme_void() +
+    scale_fill_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+    stat_compare_means(label = "..p..",
+                       method = "t.test",
+                       ref.group = "C1",
+                       show.legend = FALSE) +
+  coord_flip()
+
+p_y <- ggplot(mueller, 
+            aes(x=FinalExpressionSubclusters,
+             y=`mut Kras expression [qPCR]`,
+             fill=FinalExpressionSubclusters)) +
+    geom_boxplot(color="black", show.legend = FALSE) +
+    theme_void() +
+    scale_fill_manual(values = rev(RColorBrewer::brewer.pal(3, "Set1"))[2:3]) +
+    stat_compare_means(label = "..p..",
+                       method = "t.test",
+                       ref.group = "C1",
+                       show.legend = FALSE)
+
+p_plot <- p_x + plot_spacer() + 
+    p + p_y +
+    plot_layout(ncol = 2, 
+                nrow=2,
+                width= c(4,1),
+                heights = c(1,4)
+    )
+
+
+print(p_plot)
+
+## save plot
+ggsave("results_mouse_Smpd1_public/correlation_kras_mueller.pdf",
+       plot = p_plot, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## kras over expression
+```{r}
+mueller_oe <- readxl::read_excel("../../Data/transcriptome/mouse_public_rad/HPDE-core_cpm_mod.xlsx", skip = 1)
+
+mueller_oe <- mueller_oe %>%
+  group_by(gene) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup() %>%
+  column_to_rownames("gene")
+
+kds30 <- read.csv("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kds30_pmid_36852277.csv", 
+                  sep = ";")
+kds30$KDS30 <- scan(text=kds30$KDS30, dec=",", sep=".")
+kds30_genes <- unlist(kds30$Gene.ID)
+
+mat <- mueller_oe
+
+mat_sub <- mat[rownames(mat) %in% kds30_genes,]
+
+mat_sub <- heatmaply::percentize(mat_sub)
+
+kds30 <- kds30[kds30$Gene.ID %in% rownames(mat_sub),]
+
+kds30_r <- data.frame()
+
+for ( i in colnames(mat_sub)) {
+  pcc <- cor.test(mat_sub[[i]], kds30$KDS30)
+  kds30_r <- rbind(kds30_r, data.frame(barcode=i,
+                                       kds30=pcc$estimate))
+}
+
+kds30_r <- kds30_r %>%
+  as_tibble() 
+
+
+
+mueller_oe_metadata <- readxl::read_excel("../../Data/transcriptome/mouse_public_rad/HPDE-core_cpm_mod.xlsx") %>%
+  filter(Sample == "gene") %>%
+  dplyr::select(matches("HPDE")) %>%
+  sjmisc::rotate_df() %>%
+  rename("barcode" = "V1") %>%
+  rownames_to_column("samples") %>%
+  mutate(samples = gsub("^HPDE-", "", samples)) %>%
+  mutate(samples = gsub("-1-", "-", samples)) %>%
+  separate(samples, into = c("Gene", "DOX", "replicate"), sep= "-", remove = FALSE) %>%
+  mutate(DOX = as.numeric(gsub("DOX", "", DOX))) %>%
+  full_join(kds30_r, by = "barcode")
+
+mueller_oe_ratio <- mueller_oe %>%
+  rownames_to_column("gene") %>%
+  filter(gene %in% c("KRAS", "SMPD1")) %>%
+  sjmisc::rotate_df(cn= TRUE) %>%
+  rownames_to_column("barcode")
+
+mueller_oe_ratio$ratio <- mueller_oe_ratio$KRAS / mueller_oe_ratio$SMPD1
+
+df <- mueller_oe_ratio %>%
+  full_join(mueller_oe_metadata, by = "barcode") %>%
+  group_by(Gene, DOX) %>%
+  summarise_if(is.numeric, mean) %>%
+  ungroup() %>%
+  mutate(
+    g12d_ratio_dox_0 = ifelse(sum(Gene == "G12D" & DOX == 0) == 1, ratio[Gene == "G12D" & DOX == 0], NA),
+    gfp_ratio_dox_0 = ifelse(sum(Gene == "GFP" & DOX == 0) == 1, ratio[Gene == "GFP" & DOX == 0], NA),
+    gfp_ratio_dox_10000 = ifelse(sum(Gene == "GFP" & DOX == 10000) == 1, ratio[Gene == "GFP" & DOX == 10000], NA),
+    norm_ratio1 = ratio / g12d_ratio_dox_0,
+    norm_ratio2 =  gfp_ratio_dox_10000 / g12d_ratio_dox_0,
+    norm_ratio = norm_ratio1 / norm_ratio2
+  ) %>%
+  filter(Gene == "G12D")
+
+p <-  ggplot(df,
+             aes(x=SMPD1*norm_ratio,
+             y=KRAS*norm_ratio)) +
+  geom_smooth(method = "lm", 
+                formula = y ~ x,
+                se=FALSE, 
+                size=2,
+                show.legend = FALSE,
+                color="gray") +
+  geom_point(aes(fill = log10(DOX)),
+             shape= 21, 
+             size = 4,
+             color = "black") +
+  ggpubr::stat_cor(show.legend = FALSE) +
+  theme_bw() +
+  scale_fill_gradientn(
+          colours = colorRampPalette(rev(RColorBrewer::brewer.pal(256, "RdBu")))(256),
+          breaks = c(-1, 0, 1, 2, 3, 4),
+          labels = c("-1", "0", "1", "2", "3", "4"),
+          limits = c(-1, 4),
+          oob = scales::squish,
+          name = "log10(Doxorubin\nconc.)"
+        ) +
+        guides(fill = guide_colourbar(
+          barwidth = unit(0.3, "cm"),
+          ticks.colour = "black",
+          frame.colour = "black"
+        )) +
+        labs(x="relative SMPD1 expression",
+             y="relative KRAS expression")
+  
+
+## save plot
+ggsave("results_mouse_Smpd1_public/correlation_kras_mueller_oe.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## kras mut expression: smpd1 KO
+```{r}
+
+df <- readxl::read_excel("../../Data/transcriptome/mouse_KO/_2024-04-25_CT-SM_Analysis-UjjwalSamples-SM.xlsx", sheet = "Kras-qPCR-vs-Kras-Ratio_NoDups")
+
+p <- df %>%
+  mutate(Status = ifelse(grepl("-wt-",SampleName), "WT", "Smpd1-KO"),
+         Clones = ifelse(grepl("-wt-",SampleName), "WT",
+                         ifelse(grepl("-C3-",SampleName), "C3",
+                                ifelse(grepl("-C5-",SampleName), "C5", "C6"))),
+         Status=relevel(as.factor(Status), ref="WT")) %>%
+  ggplot(aes(x = Status, y = `qPCR-mKras-TotalExpression`, fill = Status)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(fill=Clones), shape = 21, size = 3, color = "black", alpha= 0.5) +
+  theme_bw() +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  ggpubr::stat_compare_means(method = "t.test",
+                             label = "p",
+                             position = "identity",
+                             ref.group = "WT",
+                             angle= 0) +
+  xlab("") +
+  ylab("mKras Total Expression (AU)") +
+  scale_y_continuous(trans="log2", labels = label_log(2), limits = c(32,256))
+
+print(p)
+
+## save plot
+ggsave("results_mouse_Smpd1_public/smpld1_ko_kras_mut.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+```
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

@@ -1,0 +1,204 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (data preparation)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm")),
+       dir.create(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm")), FALSE)
+
+## cells results directory
+ifelse(!dir.exists(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm/cells")),
+       dir.create(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm/cells")), FALSE)
+
+## supernatent results directory
+ifelse(!dir.exists(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm/supernatent")),
+       dir.create(file.path(paste0(here()), "Sphingolipids/results_metabolome_mm/supernatent")), FALSE)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+```
+
+# generate expData
+
+## metadata
+
+```{r}
+metadata_cells <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP DATA TABLES_MOUSE CELLS (GLOBAL DATA).XLSX", "Sample Meta Data") %>%
+  filter(CELL_LINE_ABBR == "K") %>%
+  filter(CELL_GENOTYPE %in% c("WT", "S1KO")) %>%
+  mutate(SAMPLE_AMOUNT = as.numeric(SAMPLE_AMOUNT))
+
+rownames(metadata_cells) <- metadata_cells$PARENT_SAMPLE_NAME
+
+metadata_sn <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP DATA TABLES_MOUSE SUPERNATANT (GLOBAL DATA).XLSX", "Sample Meta Data") %>%
+  filter(CELL_LINE_ABBR == "K") %>%
+  filter(CELL_GENOTYPE %in% c("WT", "S1KO"))
+
+rownames(metadata_sn) <- metadata_sn$PARENT_SAMPLE_NAME
+```
+
+## global data and CLP data -> cells
+
+```{r}
+hd4_cells <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP DATA TABLES_MOUSE CELLS (GLOBAL DATA).XLSX", "Batch-normalized Data") 
+
+hd4_cells <- hd4_cells %>%
+  column_to_rownames("PARENT_SAMPLE_NAME")
+
+hd4_cells <- hd4_cells[metadata_cells$PARENT_SAMPLE_NAME, ]
+
+clp_cells_names <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP CLIENT DATA TABLE_MOUSE CELLS (CLP).XLSX", 
+                                "Species Concentrations",
+                                skip = 5) 
+
+clp_cells <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP CLIENT DATA TABLE_MOUSE CELLS (CLP).XLSX", 
+                                "Species Concentrations",
+                                skip = 22) 
+
+colnames(clp_cells) <- colnames(clp_cells_names)
+
+clp_cells <- clp_cells %>%
+  dplyr::select(-`CLIENT IDENTIFIER`, -...1) %>%
+  column_to_rownames("...2") %>%
+  mutate_all(as.numeric) %>%
+  sjmisc::rotate_df() 
+
+clp_cells <- clp_cells[metadata_cells$CLIENT_IDENTIFIER, ]
+
+rownames(clp_cells) <- metadata_cells$PARENT_SAMPLE_NAME[match(metadata_cells$CLIENT_IDENTIFIER, rownames(clp_cells))]
+
+hd4_clp_cells <- merge(hd4_cells, clp_cells, by = 0)
+
+hd4_clp_cells <- hd4_clp_cells %>%
+  column_to_rownames("Row.names") 
+
+## remove column with mising >80% values
+hd4_clp_cells <- hd4_clp_cells[,colMeans(is.na(hd4_clp_cells)) <= 0.8]
+
+## imputetransformscale
+hd4_clp_cells_imputed <- metapacR::ImputeTransformScale(hd4_clp_cells,
+                                              Impute = TRUE,
+                                              Transform = TRUE,
+                                              Scaling = TRUE,
+                                              ScaleType = "Auto")
+
+## save and import data
+expData <- list()
+
+expData[["raw.counts"]] <- hd4_clp_cells
+  
+expData[["imputed.matrix"]] <- hd4_clp_cells_imputed
+
+expData[["metadata"]] <- metadata_cells
+
+
+saveRDS(expData, paste0(here(), "/Sphingolipids/results_metabolome_mm/cells/expData_metabolon_untargeted_cells.rds"))
+```
+
+
+## global data and CLP data -> supernatent
+
+```{r}
+hd4_sn <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP DATA TABLES_MOUSE SUPERNATANT (GLOBAL DATA).XLSX", "Batch-normalized Data") 
+
+hd4_sn <- hd4_sn %>%
+  column_to_rownames("PARENT_SAMPLE_NAME")
+
+hd4_sn <- hd4_sn[metadata_sn$PARENT_SAMPLE_NAME, ]
+
+clp_sn_names <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP CLIENT DATA TABLE_MOUSE SUPERNATANT (CLP).XLSX", 
+                                "Species Concentrations",
+                                skip = 5) 
+
+clp_sn <- readxl::read_excel("../../Data/Metabolome/mouse_smpd1_ko/KLUM-01-22MDCLP CLIENT DATA TABLE_MOUSE SUPERNATANT (CLP).XLSX", 
+                                "Species Concentrations",
+                                skip = 22) 
+
+colnames(clp_sn) <- colnames(clp_sn_names)
+
+clp_sn <- clp_sn %>%
+  dplyr::select(-`CLIENT IDENTIFIER`, -...1) %>%
+  column_to_rownames("...2") %>%
+  mutate_all(as.numeric) %>%
+  sjmisc::rotate_df() 
+
+clp_sn <- clp_sn[metadata_sn$CLIENT_IDENTIFIER, ]
+
+rownames(clp_sn) <- metadata_sn$PARENT_SAMPLE_NAME[match(metadata_sn$CLIENT_IDENTIFIER, rownames(clp_sn))]
+
+hd4_clp_sn <- merge(hd4_sn, clp_sn, by = 0)
+
+hd4_clp_sn <- hd4_clp_sn %>%
+  column_to_rownames("Row.names") 
+
+## remove column with mising >80% values
+hd4_clp_sn <- hd4_clp_sn[,colMeans(is.na(hd4_clp_sn)) <= 0.8]
+
+## imputetransformscale
+hd4_clp_sn_imputed <- metapacR::ImputeTransformScale(hd4_clp_sn,
+                                              Impute = TRUE,
+                                              Transform = TRUE,
+                                              Scaling = TRUE,
+                                              ScaleType = "Auto")
+
+## save and import data
+expData <- list()
+
+expData[["raw.counts"]] <- hd4_clp_sn
+  
+expData[["imputed.matrix"]] <- hd4_clp_sn_imputed
+
+expData[["metadata"]] <- metadata_sn
+
+saveRDS(expData, paste0(here(), "/Sphingolipids/results_metabolome_mm/supernatent/expData_metabolon_untargeted_supernatent.rds"))
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```
