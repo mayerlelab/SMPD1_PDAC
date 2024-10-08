@@ -42,16 +42,6 @@ kegg_list <- msigdbr(species = "Homo sapiens") %>%
 
 kegg_ok <- kegg_list[names(kegg_list) %in% grep(paste(c("_SPHINGOMYELIN", "_CERAMIDE"), collapse = "|"), names(kegg_list), value = TRUE)]
 
-pathway_to_include <- c("REACTOME_SPHINGOLIPID_METABOLISM",
-                        "REACTOME_SPHINGOLIPID_DE_NOVO_BIOSYNTHESIS",
-                        "GOBP_SPHINGOLIPID_MEDIATED_SIGNALING_PATHWAY",
-                        "GOBP_POSITIVE_REGULATION_OF_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
-                        "GOBP_NEGATIVE_REGULATION_OF_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
-                        "GOBP_CELLULAR_SPHINGOLIPID_HOMEOSTASIS",
-                        "GOBP_SPHINGOMYELIN_CATABOLIC_PROCESS",
-                        "GOBP_SPHINGOMYELIN_METABOLIC_PROCESS",
-                        "GOMF_SPHINGOMYELIN_PHOSPHODIESTERASE_ACTIVITY")
-
 for (i in names(kegg_ok)) {
   print(i)
   
@@ -68,8 +58,6 @@ for (i in names(kegg_ok)) {
   
   print(p)
 }
-
-
 
 p <- SCpubr::do_DotPlot(sample = obj, 
                         group.by = "Cell_type",
@@ -89,16 +77,3 @@ ggsave(paste0("module_score_dot_plot.pdf"),
        width = 13,
        height = 6,
        dpi=300)
-
-
-## prepare data for heqatmpa plotting
-df <- obj@meta.data
-df <- df[, colnames(df) %in% c("Cell_type",paste0(names(kegg_ok), "1"))]
-table(df$Cell_type)
-
-df <- df %>% group_by(Cell_type) %>% dplyr::summarise_if(is.numeric, median, na.rm = TRUE) %>%
-  ungroup() %>%
-  column_to_rownames("Cell_type") %>%
-  sjmisc::rotate_df(cn=FALSE)
-
-pheatmap::pheatmap(as.matrix(df), scale = "row")

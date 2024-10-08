@@ -941,8 +941,6 @@ ggsave("results_mouse_proteome/Subcelluar_localization_dotplot_membrane.pdf",
        units = "cm")
 ```
 
-
-
 ## analyse Surface Proteome data
 ```{r}
 p_value_cutoff <- 0.05
