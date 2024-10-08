@@ -1,0 +1,409 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Smpd1 ko metabolome (pathway analysis)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "Seurat",
+  "SeuratDisk",
+  "tidyverse",
+  "SCpubr"
+)
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+  stopifnot(!missing(x))
+  stopifnot(!missing(filename))
+  pdf(filename, width=width, height=height)
+  grid::grid.newpage()
+  grid::grid.draw(x$gtable)
+  dev.off()
+} 
+
+```
+
+## untar data
+```{r}
+## untar files
+untar(tarfile = "GSE228502_RAW.tar",
+      exdir = "GSE228502/",
+      verbose = TRUE)
+
+## subset KPPC
+list_files <- list.files(path = "GSE228502/",
+                         full.names = TRUE,
+                         recursive = FALSE)
+
+list_files_KPPC <- list_files[grepl("_KPPC_", list_files)]
+
+file.remove(setdiff(list_files, list_files_KPPC))
+
+vehicle <- ReadMtx(
+  mtx = "GSE228502/GSM7122868_KPPC_1133_Veh_matrix.mtx.gz", 
+  features = "GSE228502/GSM7122868_KPPC_1133_Veh_features.tsv.gz",
+  cells = "GSE228502/GSM7122868_KPPC_1133_Veh_barcodes.tsv.gz"
+)
+
+vehicle_sce <- CreateSeuratObject(counts = vehicle, project="Vehicle")
+
+mrtx1133 <- ReadMtx(
+  mtx = "GSE228502/GSM7122869_KPPC_1133_matrix.mtx.gz", 
+  features = "GSE228502/GSM7122869_KPPC_1133_features.tsv.gz",
+  cells = "GSE228502/GSM7122869_KPPC_1133_barcodes.tsv.gz"
+)
+
+mrtx1133_sce <- CreateSeuratObject(counts = mrtx1133, project="MRTX1133")
+
+
+sce <- merge(vehicle_sce, 
+             y = mrtx1133_sce, 
+             add.cell.ids = c("Vehicle", "MRTX1133"), 
+             project = "Kras")
+sce
+
+sce$orig.ident <- factor(sce$orig.ident, levels = c("Vehicle", "MRTX1133"))
+
+sce[["percent.mt"]] <- PercentageFeatureSet(sce, pattern = "^mt-")
+
+VlnPlot(sce, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+plot1 <- FeatureScatter(sce, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(sce, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+
+sce <- subset(sce, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+
+sce <- NormalizeData(sce, normalization.method = "LogNormalize", scale.factor = 10000)
+
+sce <- NormalizeData(sce)
+
+sce <- FindVariableFeatures(sce, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(sce), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(sce)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+
+all.genes <- rownames(sce)
+sce <- ScaleData(sce, features = all.genes)
+
+sce <- RunPCA(sce, features = VariableFeatures(object = sce))
+
+# Examine and visualize PCA results a few different ways
+print(sce[["pca"]], dims = 1:5, nfeatures = 5)
+
+VizDimLoadings(sce, dims = 1:2, reduction = "pca")
+
+DimPlot(sce, reduction = "pca")
+
+DimHeatmap(sce, dims = 1, cells = 500, balanced = TRUE)
+
+DimHeatmap(sce, dims = 1:15, cells = 500, balanced = TRUE)
+
+ElbowPlot(sce)
+
+sce <- FindNeighbors(sce, dims = 1:10)
+sce <- FindClusters(sce, resolution = 0.5)
+
+sce <- RunUMAP(sce, dims = 1:10)
+
+DimPlot(sce, reduction = "umap", label = TRUE, group.by = "orig.ident")
+
+sce<- IntegrateLayers(object = sce, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca",
+    verbose = FALSE)
+
+# re-join layers after integration
+sce[["RNA"]] <- JoinLayers(sce[["RNA"]])
+
+sce <- FindNeighbors(sce, reduction = "integrated.cca", dims = 1:30)
+sce <- FindClusters(sce, resolution = 0.2)
+
+sce <- RunUMAP(sce, dims = 1:10, reduction = "integrated.cca")
+
+sce <- BuildClusterTree(sce)
+
+# Visualization
+DimPlot(sce, reduction = "umap", group.by = c("orig.ident"))
+DimPlot(sce, reduction = "umap", label =TRUE)
+
+markers <- FindAllMarkers(sce, only.pos = TRUE)
+
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1)
+
+markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+
+DoHeatmap(sce, features = top10$gene) + NoLegend()
+
+## 0 = B cells, 1 = Monocytes, 2= t cells, 3 = cancer cells, 4 = TAMs, 5 = acini , 6 = enodothelial cells, 7 = CAFs, 8 = neutrophils, 9 = exocrine cells
+
+new.cluster.ids <- c("B cells", "Macrophages", "T cells and NK cells", "Cancer cells", "DCs", "Acinar cells", "Endothelial cells", "Fibroblasts", "Granulocytes", "Plasma cells")
+
+names(new.cluster.ids) <- levels(sce)
+sce <- RenameIdents(sce, new.cluster.ids)
+sce[["cell_type"]] <- Idents(sce)
+
+DimPlot(sce, reduction = "umap", label = TRUE, pt.size = 0.5, split.by = "orig.ident") + NoLegend()
+
+
+library(msigdbr)
+
+kegg_list <- msigdbr(species = "Mus musculus") %>%
+  distinct(gs_name, gene_symbol) %>%
+  nest(genes = c(gene_symbol)) %>%
+  mutate(genes = purrr::map(genes, purrr::compose(as_vector, unname))) %>%
+  deframe()
+
+kegg_ok <- kegg_list[names(kegg_list) %in% grep(paste(c("_SPHINGOLIPID", "_SPHINGOMYELIN", "_CERAMIDE"), collapse = "|"), names(kegg_list), value = TRUE)]
+
+for (i in names(kegg_ok)) {
+  print(i)
+  
+  #if (i %in% pathway_to_include){
+  genes <- list(kegg_ok[[i]])
+  
+  sce <- AddModuleScore(
+    object = sce,
+    features = genes,
+    name = i
+  )
+}
+
+DimPlot(sce, reduction = "umap", label = TRUE, pt.size = 0.5, split.by = "orig.ident") + NoLegend()
+
+for (i in names(kegg_ok)) {
+  
+p <- SCpubr::do_RidgePlot(sample = sce,
+                          feature = paste0(i, "1"),
+                          compute_quantiles = TRUE,
+                          color_by_probabilities = TRUE,
+                          split.by ="orig.ident" )
+
+print(p)
+}
+
+
+# Basic violin plot.
+for (i in names(kegg_ok)) {
+  p <- VlnPlot(sce,
+             features = paste0(i, "1"),
+             split.by ="orig.ident",
+             split.plot = TRUE)
+  print(p)
+}
+
+# Basic violin plot.
+for (i in names(kegg_ok)) {
+  p <- FeaturePlot(sce,
+             features = paste0(i, "1"),
+             split.by ="orig.ident")
+  print(p)
+}
+
+select_score <- "GOMF_SPHINGOLIPID_TRANSFER_ACTIVITY1"
+
+p <- SCpubr::do_RidgePlot(sample = sce,
+                          feature = select_score,
+                          compute_quantiles = TRUE,
+                          color_by_probabilities = FALSE,
+                          split.by ="orig.ident" )
+
+print(p)
+
+ggsave("ridge_plot.pdf",
+       p,
+       width = 9,
+       height = 5,
+       dpi=300)
+
+
+p <- do_DimPlot(sce, 
+                reduction = "umap", 
+                label = TRUE, 
+                label.box = FALSE,
+                split.by = "orig.ident")
+
+print(p)
+
+ggsave("splitUMAP.pdf",
+       p,
+       width = 6,
+       height = 3,
+       dpi=300)
+
+
+p <- do_DimPlot(sce, 
+                reduction = "umap", 
+                label = TRUE, 
+                label.box = FALSE,
+                legend.position = "none")
+
+print(p)
+
+ggsave("phenotypes_UMAP.pdf",
+       p,
+       width = 3,
+       height = 3,
+       dpi=300)
+
+p4 <- SCpubr::do_BarPlot(sce, 
+                         group.by = "cell_type",
+                         split.by = "orig.ident",
+                         position = "fill",
+                         flip = FALSE)
+
+print(p4)
+
+ggsave("phenotypes_percentage1.pdf",
+       p4,
+       width = 5,
+       height = 5,
+       dpi=300)
+
+
+# Geyser plot with categorical color scale split by seurat clusters.
+
+for (i in names(kegg_ok)) {
+  p1 <- SCpubr::do_GeyserPlot(sample = sce,
+                            features = paste0(i, "1"),
+                            scale_type = "categorical",
+                            group.by = "orig.ident",
+                            split.by = "cell_type")
+  
+  print(p1)
+  
+}
+
+
+df <- sce@meta.data %>%
+  as.data.frame() %>%
+  filter(cell_type == "Cancer cells")
+
+for (i in names(kegg_ok)) {
+p <- ggplot(data=df) +
+  geom_boxplot(aes(x= orig.ident, 
+                  y= .data[[paste0(i, "1")]],
+                  fill=orig.ident), 
+               color="black",
+               show.legend = FALSE) +
+  geom_jitter(aes(x= orig.ident, 
+                  y= .data[[paste0(i, "1")]], 
+                  fill=orig.ident),
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.5,
+              show.legend = FALSE) +
+  ggpubr::stat_compare_means(data=df, 
+                     aes(x= orig.ident, 
+                         y= .data[[paste0(i, "1")]]), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_bw() +
+  xlab("") +
+  ylab(paste0(i, "_SCORE"))
+
+print(p)
+
+ggsave(paste0(i,"_score.pdf"),
+       p,
+       width = 2,
+       height = 3,
+       dpi=300)
+
+
+}
+
+saveRDS(sce, "merged_expt_KPPC.rds")
+
+## cancer specific cluster
+sce <- readRDS("merged_expt_KPPC.rds")
+
+sce_sub <- subset(x = sce, idents = "Cancer cells")
+
+col <- c("#377EB8","#E41A1C")
+names(col) <- c("Vehicle", "MRTX1133")
+
+p <- do_DimPlot(sce_sub, 
+                reduction = "umap", 
+                label = FALSE, 
+                label.box = FALSE,
+                split.by = "orig.ident",
+                legend.position = "none",
+                plot.axes = TRUE,
+                colors.use = col)
+
+print(p)
+
+ggsave("splitUMAP_cancer_cells.pdf",
+       p,
+       width = 5,
+       height = 2,
+       dpi=300)
+
+for (i in names(kegg_ok)) {
+  print(i)
+  
+  #if (i %in% pathway_to_include){
+  genes <- list(kegg_ok[[i]])
+  
+  sce_sub <- AddModuleScore(
+    object = sce_sub,
+    features = genes,
+    name = i
+  )
+}
+
+for (i in names(kegg_ok)) {
+  p <- VlnPlot(sce_sub,
+             features = paste0(i, "1"),
+             split.by ="orig.ident")
+  print(p)
+}
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

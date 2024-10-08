@@ -1,0 +1,1486 @@
+---
+title: "download TCGA and ICGC data"
+subtitle: "__compiled data__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r echo=TRUE}
+rm(list = ls())
+# load packages -----------------------------------------------------------
+scriptLibraries <-  c(
+  "DESeq2",
+  "ggplot2",
+  "ggrepel",
+  "RColorBrewer",
+  "DT",
+  "pheatmap",
+  "limma", 
+  "tidyverse",
+  "here",
+  "ggpubr",
+  "sjPlot",
+  "Biobase",
+  "clusterProfiler",
+  "org.Hs.eg.db",
+  "vroom",
+  "msigdbr",
+  "DOSE",
+  "ReactomePA",
+  "GOstats",
+  "genefilter",
+  "topGO",
+  "fgsea",
+  "GOplot",
+  "gprofiler2",
+  "igraph",
+  "intergraph",
+  "GGally",
+  "tm",
+  "wordcloud",
+  "piano",
+  "biomaRt"
+)
+
+# scripts --------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+# load packages -------------------------------------------------------
+installScriptLibs(scriptLibraries)
+```
+
+## custom functions
+```{r}
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/get_TCGA_ICGC_data.R")
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/custom_pathway_analysis.R")
+```
+
+# TCGA data DEG
+
+## get Gene set for subtyping
+```{r}
+# Specify the URL of the raw RDS file
+url <- "https://github.com/rmoffitt/pdacR/raw/master/data/gene_lists.rds"
+
+# Download the RDS file
+response <- httr::GET(url, httr::add_headers("Accept-Encoding" = "gzip"))
+content <- httr::content(response)
+
+# Save the content to a local file
+local_file <- "gene_lists.rds"
+writeBin(content, local_file)
+
+# Read the RDS file
+gene_list <- readRDS(local_file)
+```
+
+## arg
+```{r}
+project = "PAAD-US"
+pval = 0.05
+dir.create("results")
+```
+
+## create se, deg, pathway analysis
+
+```{r}
+banner(project)
+
+get_TCGA_ICGC_data(project = project,
+                   clinical = TRUE,
+                   rna_seq = TRUE,
+                   methylation = FALSE,
+                   mirna = FALSE,
+                   cnv=FALSE,
+                   somatic_mut=TRUE
+                  )
+
+data <- read_rds(list.files(pattern = project, full.names = TRUE))
+
+##------------------------------------------------------------------------------------
+#Set up an gene annotation template to use
+mart <-
+  useMart(
+    biomart = "ENSEMBL_MART_ENSEMBL",
+    host = "grch37.ensembl.org",
+    path = "/biomart/martservice",
+    dataset = "hsapiens_gene_ensembl"
+  )
+
+annot <-
+  getBM(attributes = c("ensembl_gene_id", "hgnc_symbol"),
+        mart = mart)
+
+if (project != "PAAD-US") {
+  data_raw <- data[["rna_seq_raw"]] %>%
+    rownames_to_column("ensembl_gene_id") %>%
+    left_join(annot, by = "ensembl_gene_id") %>%
+    mutate(hgnc_symbol = ifelse(is.na(hgnc_symbol), ensembl_gene_id, hgnc_symbol)) %>%
+    dplyr::select(-ensembl_gene_id) %>%
+    group_by(hgnc_symbol) %>%
+    summarise_all(median, na.rm = TRUE) %>%
+    column_to_rownames("hgnc_symbol")
+} else {
+  data_raw <- data[["rna_seq_raw"]]
+}
+
+##------------------------------------------------------------------------------------
+## Kras mutation status
+if (project != "PAAD-US") {
+data_mut <- data[["somatic_mutation"]]  %>%
+  dplyr::filter(hgnc_symbol == "KRAS") %>%
+  mutate(mut_freq = mutant_allele_read_count / total_read_count) %>%
+  dplyr::select(icgc_donor_id, aa_mutation, mut_freq) %>%
+  drop_na()
+} else{
+  data_mut <- data.table::fread("paad_tcga/data_mutations.txt") %>%
+    dplyr::filter(Hugo_Symbol == "KRAS") %>%
+    mutate(mut_freq = t_alt_count / (t_ref_count + t_alt_count)) %>%
+    dplyr::select(Tumor_Sample_Barcode, HGVSp_Short, mut_freq) %>%
+    data.table::setnames(old=c("Tumor_Sample_Barcode", "HGVSp_Short"),
+                         new=c("submitted_specimen_id", "aa_mutation")) %>%
+    mutate(submitted_specimen_id = paste0(submitted_specimen_id, "A")) %>%
+    drop_na()
+}
+
+##------------------------------------------------------------------------------------
+## tumor purity
+if (project == "PAAD-US") {
+  purity <-
+    data.table::fread(
+      "http://api.gdc.cancer.gov/data/4f277128-f793-4354-a13d-30cc7fe9f6b5",
+      encoding = "UTF-8"
+    ) %>%
+    dplyr::select(array, purity, ploidy) %>%
+    mutate(ABSOLUTE = ifelse(purity < 0.33, "Low", "High")) %>%
+    mutate(submitted_donor_id = gsub("-01$", "", array)) %>%
+    dplyr::select(-array)
+} else {
+  purity <-
+    data.table::fread(
+      "https://dcc.icgc.org/api/v1/download?fn=/PCAWG/evolution_and_heterogeneity/icgc_sample_annotations_summary_table.txt",
+      encoding = "UTF-8"
+    ) %>%
+    dplyr::select(icgc_donor_id, purity, ploidy) %>%
+    mutate(ABSOLUTE = ifelse(purity < 0.33, "Low", "High"))
+}
+
+##------------------------------------------------------------------------------------
+## identify subtypes
+# if (project == "PAAD-US") {
+#   cluster <- TCGAbiolinks::TCGAquery_subtype(tumor = "paad")
+#   cluster <- cluster %>%
+#     dplyr::select(`Tumor Sample ID`,
+#                   `mRNA Moffitt clusters (All 150 Samples) 1basal  2classical`)
+#   colnames(cluster) <-
+#     c("submitted_specimen_id", "moffitt_classifier")
+#   cluster$moffitt_classifier <-
+#     ifelse(cluster$moffitt_classifier == 1, "basal", "classical")
+# } else {
+data_raw <- data_raw %>%
+  replace(is.na(.), 0)
+dds <-  DESeqDataSetFromMatrix(round(data_raw),
+                               colData = data.frame(colnames(data_raw)),
+                               design = ~1)
+## normalize matrix
+dds <- estimateSizeFactors(dds)
+## perform DE
+dds <- DESeq(dds, parallel = TRUE)
+## plot dispersion
+plotDispEsts(dds)
+## calculate variance stabilizing transformation
+vst <-  vst(dds, blind = TRUE)
+## create corrected matrix
+corrected_mat <- assay(vst)
+coefs <- attr(DESeq2::dispersionFunction(dds), "coefficients")
+x <- corrected_mat * log(2)
+x <- exp(1)^x * (4 * coefs["asymptDisp"])
+x <- (x - (1 + coefs["extraPois"]))/2
+data_normalized <- x^2 / (coefs["asymptDisp"] * (coefs["extraPois"] + 2 * x + 1))
+
+data_normalized_log2 <- log2(data_normalized + 1)
+### score genes
+classical_set <- gene_list$Moffitt.Classical.25
+basal_set <- gene_list$Moffitt.Basal.25
+
+cluster <-
+  data.frame(icgc_donor_id = colnames(data_normalized_log2))
+
+### subset data
+smallx <-
+  data_normalized_log2[rownames(data_normalized_log2) %in% c(basal_set, classical_set), ]
+smallx_scaled <- t(scale(t(smallx)))
+
+# scaled clustering
+cluster.result.c <-
+  ConsensusClusterPlus::ConsensusClusterPlus(
+    d = as.matrix(smallx_scaled),
+    seed = 1234,
+    pFeature = 0.8,
+    pItem = 0.8,
+    maxK = 3,
+    reps =
+      200,
+    distance =
+      "pearson",
+    clusterAlg =
+      "pam"
+  )[[2]]$consensusTree
+
+cluster.cut <-
+  data.frame(cuts = (c("basal", "classical", "classical")[cutree(cluster.result.c, k =
+                                                          7)]), stringsAsFactors = FALSE)
+cluster$moffitt_classifier <- cluster.cut[[1]]
+  
+# }
+
+##------------------------------------------------------------------------------------
+## modify clinical data
+
+data_clinical <- data[["clinical"]] %>%
+  filter(icgc_donor_id %in% colnames(data_raw)) %>%
+  dplyr::select(-digital_image_of_stained_section,-icgc_sample_id,-submitted_sample_id) %>%
+  filter(specimen_type == "Primary tumour - solid tissue") %>%
+  distinct() %>%
+  mutate(
+    OS_cen = if_else(
+      donor_vital_status == "deceased",
+      1,
+      if_else(donor_vital_status == "alive", 0, NA)
+    ),
+    OS_time = coalesce(donor_survival_time, donor_interval_of_last_followup)
+  ) %>%
+  mutate(OS_time = OS_time * 0.032855) 
+
+if (project == "PAAD-US") {
+  data_clinical <- data_clinical %>%
+    left_join(purity, by = "submitted_donor_id") %>%
+    left_join(data_mut, by = "submitted_specimen_id") %>%
+    left_join(cluster, by = "icgc_donor_id") %>%
+    replace_na(list(aa_mutation="WT")) %>%
+    mutate(KRASmut = ifelse(aa_mutation == "WT", "WT", "KRASmut"))
+} else{
+  data_clinical <- data_clinical %>%
+    left_join(cluster, by = "icgc_donor_id") %>%
+    left_join(data_mut, by = "icgc_donor_id") %>%
+    replace_na(list(aa_mutation="WT")) %>%
+    mutate(KRASmut = ifelse(aa_mutation == "WT", "WT", "KRASmut")) %>%
+    dplyr::select(
+      -submitted_specimen_id,-icgc_specimen_id,-percentage_cellularity,-level_of_cellularity,-tumour_confirmed,-tumour_histological_type) %>%
+    filter(specimen_donor_treatment_type %in% c("surgery", "no treatment")) %>%
+    left_join(purity, by = "icgc_donor_id") 
+}
+
+data_clinical <- data_clinical %>%
+  distinct() %>%
+  group_by(icgc_donor_id) %>%
+  arrange(aa_mutation) %>%
+  dplyr::slice(1) %>%
+  ungroup() %>%
+  column_to_rownames("icgc_donor_id")
+
+##------------------------------------------------------------------------------------
+## create summarized experiment
+
+### our design consist of moffitt_classifier---removing NAs
+data_clinical <- data_clinical %>%
+  drop_na(moffitt_classifier) 
+
+colData <- data_clinical
+
+## sort data_raw as per clinical order
+data_raw <- data_raw[, rownames(colData)]
+data_raw <- data_raw[, order(match(colnames(data_raw), rownames(colData)))]
+
+## filter rows with 0 counts
+flt <- rowSums(data_raw) > 0
+data_raw <- data_raw[flt,]
+
+annot <-
+  getBM(attributes = c("ensembl_gene_id", "hgnc_symbol","entrezgene_id"),
+        mart = mart)
+
+rowData <- data.frame(hgnc_symbol=rownames(data_raw)) %>%
+  left_join(annot, "hgnc_symbol") %>%
+  group_by(hgnc_symbol) %>%
+  dplyr::slice(1) %>%
+  ungroup() %>%
+  column_to_rownames("hgnc_symbol")
+
+## sort data_raw as per clinical order
+data_raw <- data_raw[order(match(rownames(data_raw), rownames(rowData))), ]
+
+count <- as.matrix(round(data_raw))
+
+se <- SummarizedExperiment::SummarizedExperiment(assays=list(counts=count),
+                                                 rowData= rowData,
+                                                 colData = colData)
+
+#saveRDS(se, file.path(paste0(here()), paste0(project,"_ SummarizedExperiment.rds")))
+
+##------------------------------------------------------------------------------------
+## Phenotypes
+data <- assays(se)$counts
+data <- log2(data + 1)
+
+data <- data %>%
+  as.data.frame() %>%
+  rownames_to_column("symbol") %>%
+  pivot_longer(-symbol, names_to = "sample", values_to = "log2 (counts +1)")
+
+p1 <- ggplot(data, aes(x = `log2 (counts +1)`, color=sample)) +
+  geom_density(alpha =  0.8,
+               show.legend = FALSE) +
+  theme_bw() +
+  ggtitle(label = "Count",
+          subtitle = paste(length(unique(data$symbol)), "genes x", length(unique(data$sample)), "samples")) +
+  scale_color_manual(values = colorRampPalette(brewer.pal(6, "Set1"))(length(unique(data$sample))))
+
+print(p1)
+
+p2 <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Sample") %>%
+  dplyr::select(Sample, donor_sex, ABSOLUTE, moffitt_classifier, KRASmut) %>%
+  pivot_longer(-Sample, names_to = "variable", values_to = "values") %>%
+  group_by(variable) %>%
+  dplyr::count(values) %>%
+  ungroup() %>%
+  ggplot(aes(x = n, y = variable, fill = values)) +
+  geom_bar(stat = "identity", position = "stack", color="black", alpha=0.75, show.legend = FALSE) +
+  geom_text(aes(label = values), position = position_stack(vjust = .5)) +
+  labs(x = "", y = "") +
+  theme_void() +
+  theme(axis.text.y = element_text(size=10, face= "bold")) +
+  ggtitle(label = "Phenotypes")
+
+print(p2)
+
+##------------------------------------------------------------------------------------
+## construct DEseq2
+se$design <- factor(se$moffitt_classifier)
+
+## create DEseq object
+dds <- DESeqDataSet(se, design = ~ design)
+# Filter lowly expressed genes
+keep <- rowSums(counts(dds)) >= 10
+dds <- dds[keep, ]
+# Remove ribosomal and mitochondrial genes from the analysis
+remove <- grep("^RPS|^RPL|^MRPS|^MRPL|^MT-", rownames(dds))
+dds <- dds[-remove,]
+## normalize matrix
+dds <- estimateSizeFactors(dds)
+## perform DE
+dds <- DESeq(dds, parallel = TRUE)
+## plot dispersion
+plotDispEsts(dds)
+## calculate variance stabilizing transformation
+vst <-  vst(dds, blind = TRUE)
+## create corrected matrix
+corrected_mat <- assay(vst)
+coefs <- attr(DESeq2::dispersionFunction(dds), "coefficients")
+x <- corrected_mat * log(2)
+x <- exp(1)^x * (4 * coefs["asymptDisp"])
+x <- (x - (1 + coefs["extraPois"]))/2
+corrected_mat <- x^2 / (coefs["asymptDisp"] * (coefs["extraPois"] + 2 * x + 1))
+
+
+##------------------------------------------------------------------------------------
+## perform DEA
+comb <- combn(sort(unique(se$moffitt_classifier)),2)
+contrast <- c("design", paste0(comb[1]), paste0(comb[2]))
+
+de_result <- results(dds, 
+                     contrast = contrast, 
+                     independentFiltering = FALSE, 
+                     alpha = pval,
+                     pAdjustMethod = "BH", 
+                     parallel = TRUE, 
+                     cooksCutoff = Inf)
+
+confects <- topconfects::deseq2_confects(dds, 
+                                         contrast = contrast,
+                                         step = 0.01,
+                                         independentFiltering = FALSE, 
+                                         pAdjustMethod = "BH",
+                                         parallel = TRUE, 
+                                         cooksCutoff = Inf)
+
+de_result <- lfcShrink(dds,
+                       contrast = contrast,
+                       res = de_result,
+                       coef = 2, 
+                       type = "ashr")
+      
+      
+de_result <- as.data.frame(de_result) %>%
+  rownames_to_column("Symbol")
+
+confect_df <- confects$table %>%
+  as.data.frame() %>%
+  dplyr::rename(Symbol=name)%>%
+  dplyr::select(-baseMean) %>%
+  full_join(de_result, by ="Symbol") 
+
+confect_df <- confect_df %>%
+  filter(!filtered) %>%
+  mutate(confidence = case_when(
+    padj >= pval ~ "not significant",
+    padj < pval & confect >= 0.5 ~ "> 0.5",
+    padj < pval & confect >= 0.1 & confect < 0.5 ~ "0.1 - 0.5",
+    padj < pval & confect >= 0 & confect < 0.1 ~ "0 - 0.1",
+    padj < pval & confect > -0.1 & confect < 0 ~ "-0.1 - 0",
+    padj < pval & confect > -0.5 & confect <= -0.1 ~ "-0.5 - -0.1",
+    padj < pval & confect <= -0.5 ~ "< -0.5",
+    TRUE ~ NA_character_))
+
+##------------------------------------------------------------------------------------
+## pca analysis
+pcaDat <- log2(corrected_mat + 1)
+
+pca <- prcomp(t(pcaDat))
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+print(screeplot(pca))
+
+data <- data.frame(pca$x)
+metadata <- as.data.frame(se@colData)
+
+data <- merge(data, metadata, by = 0)
+
+## plot PCA
+p <- ggplot(data, aes(PC1, PC2, fill = moffitt_classifier)) + 
+  geom_point(shape=21,size = 4,color = "black", show.legend = TRUE) + 
+  ggforce::geom_mark_ellipse(geom = "polygon", alpha = 0.25,
+                             color = "gray", lty = "dotted", show.legend = FALSE) + 
+  scale_fill_manual(values = brewer.pal(length(unique(data$moffitt_classifier)),"Set1")[1:2]) + 
+  xlab(paste0("PC1: ",pc1var, "%")) + 
+  ylab(paste0("PC2: ", pc2var, "%")) + 
+  theme_bw() + 
+  theme(legend.position = "right")
+
+## print
+print(p)
+
+##------------------------------------------------------------------------------------
+## plot volcano
+df <- confect_df
+
+df <- df[order(df$log2FoldChange, decreasing = TRUE), ]
+
+## volcano plot
+datVolcano <- df %>%
+  arrange(log2FoldChange, desc(padj)) %>%
+  rownames_to_column("label") %>%
+  mutate(color = ifelse(log2FoldChange > 1 & padj < 0.01, "up",
+                        ifelse(log2FoldChange < -1 & padj < 0.1, "down", "no change"))) %>%
+  mutate(alpha = ifelse(color == "no change", 0.5, 1))
+
+datVolcanoLabel <- datVolcano %>%
+  filter(row_number() > max(row_number()) - 10 | row_number() <= 10)
+
+## plot
+p <- ggplot(datVolcano, aes(log2FoldChange, -log10(padj))) + 
+  geom_point(aes(fill = color, color = color), size = 2, pch = 21, show.legend = FALSE, alpha = 0.5) + 
+  ggrepel::geom_text_repel(data = datVolcanoLabel,aes(label = Symbol)) + 
+  theme_bw() + 
+  theme(legend.text.align = 0) + 
+  scale_x_continuous(breaks = seq(-10,10, 2)) + 
+  scale_fill_manual(values = c(up = "#CA4841", down = "#3783BB", `no change` = "gray")) +
+  scale_color_manual(values = c(up = "#CA4841", down = "#3783BB", `no change` = "gray")) +
+  labs(x = "log2(fold changes)", y = "-log10(adj. P-value)") +
+  xlim(c(-8,8))
+
+print(p)
+
+ggsave("results/volcano_plot.pdf",
+       plot = p, 
+       width = 12,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## plot MA
+df <- confect_df  
+
+palette <-
+  setNames( c("#053061","#3783BB","#A6CFE3","#F7F7F7","#F7B799","#CA4841","#67001F"),
+            c("< -0.5","-0.5 - -0.1","-0.1 - 0","not significant","0 - 0.1","0.1 - 0.5","> 0.5") )
+
+label_df1 <- df[order(df$confect, decreasing = TRUE), ]  %>%
+  filter(confidence %in% c("> 0.5", "0.1 - 0.5")) %>%
+  group_by(confidence) %>%
+  filter(row_number() <= 3) %>%
+  ungroup()
+
+label_df2 <- df[order(df$confect, decreasing = TRUE), ]  %>%
+  filter(confidence %in% c("< -0.5","-0.5 - -0.1")) %>%
+  group_by(confidence) %>%
+  filter(row_number() > max(row_number()) - 3) %>%
+  ungroup()
+
+label_df <- bind_rows(label_df1, label_df2)
+
+main <- df %>%
+  ggplot(aes(x = log2(baseMean), 
+             y = log2FoldChange,
+             fill=confidence,
+             color=confidence)) +
+  geom_point(data = . %>% filter(confidence == "not significant"), shape=15,color = "gray50", alpha=0.5, show.legend = FALSE) +
+  geom_point(data = . %>% filter(confidence != "not significant"), shape=21) +
+  ggrepel::geom_label_repel(data = label_df,aes(label = Symbol), show.legend = FALSE, max.overlaps = Inf, alpha= 0.8, color="white") +
+  scale_color_manual(values = palette) +
+  scale_fill_manual(values = palette,
+                    breaks = names(palette)) +
+  labs(x = "log2(Base Mean)",
+       y = "log2(Fold Change)",
+       fill="Confident \nLog2 FoldChange") +
+  guides(color="none") +
+  guides(fill = guide_legend(reverse = TRUE)) +
+  theme_bw()
+
+top <- df %>%
+  ggplot(aes(x= log2(baseMean),
+             fill =confidence,
+             group=confidence)) +
+  geom_histogram(data = . %>% filter(confidence != "not significant"),
+                 color="gray", show.legend = FALSE, size=0.2) +
+  scale_fill_manual(values = palette) +
+  labs(x = "", 
+       y = "",
+       fill="") +
+  theme_void()
+
+left <- df %>%
+  ggplot(aes(x= log2FoldChange,
+             fill =confidence,
+             group=confidence)) +
+  geom_histogram(data = . %>% filter(confidence != "not significant"),
+                 color="gray", show.legend = FALSE, size=0.2) +
+  scale_fill_manual(values = palette) +
+  labs(x = "", 
+       y = "",
+       fill="") +
+  coord_flip() +
+  scale_y_reverse() +
+  theme_void()
+
+empty <- ggplot()+
+  geom_point(aes(1,1), colour="white") +
+  theme(
+    plot.background = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+# Arrange the plots together, with appropriate height and width for each row and column
+p <- patchwork::plot_spacer() +
+  top +
+  left +
+  main +
+  patchwork::plot_layout(nrow = 2,
+                         widths = c(1,4),
+                         heights = c(1,4)) 
+
+print(p)
+
+ggsave("results/ma_plot.pdf",
+       plot = p, 
+       width = 12,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## plot heatmap
+  
+mat <- log2(corrected_mat + 1)
+
+df <- confect_df
+
+label_df <- df[order(df$confect, decreasing = TRUE), ]  %>%
+  filter(confidence != "not significant") %>%
+  filter(row_number() <= 20 | row_number() > max(row_number()) - 20) 
+
+
+mat <- as.matrix(mat[rownames(mat) %in% label_df$Symbol,])
+
+ann <- data.frame(Subtype = se$moffitt_classifier,
+                  Kras = se$KRASmut)
+
+rownames(ann) <- colnames(se)
+Subtype.col <- c("#377EB8","#E41A1C")
+names(Subtype.col) <- unique(ann$Subtype)
+
+Kras.col <- c("#D1E5F0","#B2182B")
+names(Kras.col) <- unique(ann$Kras)
+
+
+combo.cols <- list(Subtype = Subtype.col,
+                     Kras = Kras.col)
+
+p <- pheatmap::pheatmap(mat,
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(10, "RdBu")))(100),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   cellwidth = 3,
+                   cellheight = 5,
+                   cutree_rows = 2,
+                   border_color = NA,
+                   cluster_rows = TRUE, 
+                   cluster_cols = TRUE,
+                   show_colnames = FALSE)
+
+print(p)
+
+save_pheatmap_pdf(p,
+                  "results/heatmap_confect.pdf",
+                  width=10,
+                  height=8)
+
+mat <- log2(corrected_mat + 1)
+
+classical_set <- gene_list$Moffitt.Classical.25
+basal_set <- gene_list$Moffitt.Basal.25
+
+mat <- as.matrix(mat[rownames(mat) %in% c(classical_set, basal_set),])
+
+ann <- data.frame(Subtype = se$moffitt_classifier,
+                  Kras = se$KRASmut)
+
+rownames(ann) <- colnames(se)
+Subtype.col <- c("#377EB8","#E41A1C")
+names(Subtype.col) <- unique(ann$Subtype)
+
+Kras.col <- c("#D1E5F0","#B2182B")
+names(Kras.col) <- unique(ann$Kras)
+
+
+combo.cols <- list(Subtype = Subtype.col,
+                     Kras = Kras.col)
+
+p <- pheatmap::pheatmap(mat,
+                   annotation_col = ann, 
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(10, "RdBu")))(100),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   cellwidth = 3,
+                   cellheight = 5,
+                   cutree_rows = 2,
+                   border_color = NA,
+                   cluster_rows = TRUE, 
+                   cluster_cols = TRUE,
+                   show_colnames = FALSE)
+
+print(p)
+
+save_pheatmap_pdf(p,
+                  "results/heatmap_subtype.pdf",
+                  width=10,
+                  height=8)
+
+##------------------------------------------------------------------------------------
+## kras dependency score   
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/kras_dep_score_30.R")
+
+kras_dep <- kras_dep_score_30(se)
+
+res <- metadata %>%
+  rownames_to_column("samples") %>%
+  left_join(kras_dep, by = "samples")
+
+p <- ggplot(res, aes(x=moffitt_classifier,
+                y=kds30,
+                fill=moffitt_classifier)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5,
+              show.legend = FALSE) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "basal",
+                             angle= 0) +
+  coord_cartesian(ylim = c(min(res$kds30) * 1.1, max(res$kds30) * 2)) +
+  xlab("") +
+  ylab("KRAS Dependacy Score (KDS30)")
+
+print(p)
+
+ggsave("results/kds30_plot.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## EMT score   
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/EMT_signature_score.R")
+
+emt_df <- EMT_signature_score(log2(corrected_mat+1), organism = "hsapiens")
+
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") 
+
+## plot data
+p <- emt_df %>%
+  rownames_to_column("Samples") %>%
+  inner_join(metadata, by = "Samples") %>%
+  ggplot(aes(x = moffitt_classifier, y = Creighton_EMT_score, fill = moffitt_classifier)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "basal",
+                             angle= 90) +
+  coord_cartesian(ylim = c(min(emt_df$Creighton_EMT_score) * 1.1, max(emt_df$Creighton_EMT_score) * 2)) +
+  xlab("") +
+  ylab("Creighton EMT score")
+
+print(p)
+
+ggsave("results/emt_plot.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+## correlation with Smpd1
+mat <- log2(corrected_mat + 1)
+mat_smpd1 <- mat["SMPD1",] %>%
+  as.data.frame() 
+
+colnames(mat_smpd1) <- "SMPD1"
+mat_smpd1 <- rownames_to_column(mat_smpd1, "samples")
+
+mat_smpd1 <- emt_df %>%
+  rownames_to_column("samples") %>%
+  inner_join(mat_smpd1, by ="samples")
+
+p <- ggplot(mat_smpd1,
+            aes(x=SMPD1,
+                y=Groger_EMT_score)) +
+  geom_point(shape=21, size = 3, color="black", fill="#377EB8", alpha=0.5) +
+  geom_smooth(method = "lm", 
+              formula = y ~ x,
+              color="#E41A1C",
+              size= 2) +
+  stat_cor() +
+  theme_bw() +
+  xlab("Normalized SMPD1 expression") +
+  ylab("Creighton EMT score") +
+  theme(
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  )
+
+print(p)
+
+ggsave("results/emt_correlation_Smpd1.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## Cancer Stemness Score
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/transcriptome/TS_signature_score.R")
+
+ts_df <- TS_signature_score(log2(corrected_mat+1), organism = "hsapiens")
+
+metadata <- colData(se) %>%
+  as.data.frame() %>%
+  rownames_to_column("Samples") 
+
+## plot data
+p <- ts_df %>%
+  rownames_to_column("Samples") %>%
+  inner_join(metadata, by = "Samples") %>%
+  ggplot(aes(x = moffitt_classifier, y = TS_score, fill = moffitt_classifier)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "basal") +
+  coord_cartesian(ylim = c(min(ts_df$TS_score) * 1.1, max(ts_df$TS_score) * 2)) +
+  xlab("") +
+  ylab("Cancer stemness score")
+
+print(p)
+
+ggsave("results/ts_plot.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## Kras mut Kras dosage
+#mutKras <- metadata[metadata$ABSOLUTE == "High",]
+mutKras <- metadata[metadata$KRASmut != "WT",] 
+
+p <- ggplot(mutKras,
+       aes(x=moffitt_classifier,
+           y=mut_freq*100,
+           fill=moffitt_classifier)) +
+  geom_boxplot(color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  #geom_errorbar(stat = "summary", fun.data = "mean_se", position = "dodge", width = 0.2) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "t.test", 
+                             label = "p.format", 
+                             position = "identity", 
+                             ref.group = "basal") +
+  xlab("") +
+  ylab("mutKRAS Frequency")
+
+print(p)
+
+ggsave("results/mKras_plot.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## Sphingolipid metabolism score
+library(hacksig)
+library(msigdbr)
+
+kegg_list <- msigdbr(species = "Homo sapiens") %>%
+    distinct(gs_name, gene_symbol) %>%
+    nest(genes = c(gene_symbol)) %>%
+    mutate(genes = purrr::map(genes, purrr::compose(as_vector, unname))) %>%
+    deframe()
+
+kegg_ok <- check_sig(mat, kegg_list) %>%
+    filter(frac_present > 0.75) %>%
+    pull(signature_id)
+
+# kegg_ok <- c("GOBP_POSITIVE_REGULATION_OF_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
+#              "GOBP_NEGATIVE_REGULATION_OF_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
+#              "GOBP_SPHINGOLIPID_METABOLIC_PROCESS",
+#              "GOBP_INTRACELLULAR_SPHINGOLIPID_HOMEOSTASIS",
+#              "GOBP_REGULATION_OF_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
+#              "GOBP_SPHINGOLIPID_BIOSYNTHETIC_PROCESS",
+#              "GOBP_SPHINGOLIPID_CATABOLIC_PROCESS",
+#              "GOBP_SPHINGOLIPID_MEDIATED_SIGNALING_PATHWAY",
+#              "GOBP_SPHINGOLIPID_TRANSLOCATION")
+
+kegg_ok <- kegg_ok[grepl("_SPHINGOLIPID", kegg_ok)]
+
+kegg_scores <- map_dfr(list(zscore = "zscore", ssgsea = "ssgsea", singscore= "singscore", original ="original"), 
+                       ~ hack_sig(mat,
+                                  kegg_list[kegg_ok],
+                                  method = .x,
+                                  sample_norm = "all",
+                                  rank_norm = "logrank"),
+                       .id = "method")
+
+# kegg_scores_p <- kegg_scores %>% 
+#     pivot_longer(starts_with("GOBP"), 
+#                  names_to = "go_id", values_to = "go_score")
+# 
+# kegg_scores_sub <- kegg_scores_p %>% 
+#   #filter(kegg_id == "KEGG_SPHINGOLIPID_METABOLISM") %>%
+#   inner_join(metadata, by = c("sample_id"="Samples")) %>%
+#   filter(method == "zscore")
+# 
+# kegg_scores_sub$moffitt_classifier <- relevel(factor(kegg_scores_sub$moffitt_classifier), ref = "classical")
+# 
+# p <- ggplot(kegg_scores_sub,
+#        aes(x=moffitt_classifier,
+#            y=go_score,
+#            fill=moffitt_classifier)) +
+#   geom_violin(color="black", alpha = 0.5, show.legend = FALSE) +
+#   scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+#   geom_jitter(shape = 21, size = 3, width = 0.25, color = "black", alpha= 0.5, show.legend = FALSE) +
+#   geom_boxplot(color="black", width = 0.25, alpha= 0.5) +
+#   theme_bw() +
+#   ggpubr::stat_compare_means(method = "t.test", 
+#                              label = "p.format", 
+#                              position = "identity", 
+#                              ref.group = "basal") +
+#   xlab("") +
+#   ylab("Sphingolipid metabolism \nsignature score") +
+#   facet_wrap(~go_id,scales= "free", ncol= 3) +
+#   theme(strip.text = element_text(size = 15),
+#         strip.background = element_blank())
+# 
+# print(p)
+
+metadata_sub <- metadata %>%
+  dplyr::select(Samples, moffitt_classifier)
+
+df <- kegg_scores %>%
+  filter(method == "ssgsea") %>%
+  dplyr::select(-method) %>%
+  inner_join(metadata_sub, by = c("sample_id"="Samples")) %>%
+  group_by(moffitt_classifier) %>%
+  summarize_if(is.numeric, mean) %>%
+  ungroup() %>%
+  pivot_longer(!moffitt_classifier, names_to = "Pathway", values_to = "median_value")
+
+library(rstatix)
+
+stat_test <- kegg_scores %>%
+  filter(method == "ssgsea") %>%
+  dplyr::select(-method) %>%
+  inner_join(metadata_sub, by = c("sample_id"="Samples")) %>%
+  dplyr::select(-sample_id) %>%
+  pivot_longer(!moffitt_classifier, names_to = "Pathway", values_to = "value") %>%
+  group_by(Pathway) %>%
+  wilcox_test(value ~ moffitt_classifier) %>%
+  add_significance() %>%
+  mutate(p.signif=ifelse(p.signif == "ns", NA_character_, p.signif)) %>%
+  rename(moffitt_classifier = group1) %>%
+  ungroup() %>%
+  right_join(df, by = c("Pathway", "moffitt_classifier"))
+
+stat_test$Pathway <- gsub("GOBP_|GOMF_|WP_|KEGG_", "", stat_test$Pathway)
+
+stat_test$moffitt_classifier <- factor(stat_test$moffitt_classifier, levels=c("classical","basal"))
+
+p <- ggplot(stat_test,
+            aes(x= moffitt_classifier,
+                y=Pathway, 
+                size=median_value))  +
+  geom_segment(aes(x=factor(1, levels=1:2, labels=c("classical", "basal")),
+                   xend=factor(2, levels=1:2, labels=c("classical", "basal")), 
+                   y = Pathway, 
+                   yend=Pathway), 
+               color = "black", size = 0.5) +
+  geom_point(aes(fill=median_value),
+             shape=21, color= "black", stroke = 1) +
+  geom_text(aes(label=p.signif),
+            size=3,
+            face = "bold",
+            nudge_y = 0) +
+  theme_minimal() +
+  guides(fill = guide_colourbar(barwidth = unit(0.2, "cm"),
+                                      ticks.colour = "black",
+                                      frame.colour = "black"),
+         alpha="none") +
+  scale_fill_gradient(
+  low = "#F7F7F7", 
+  high = "#CA4841") +
+  scale_size_continuous(range = c(0.1, 7)) +
+  xlab("") +
+  ylab("") +
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5))
+    
+print(p)    
+
+
+
+
+ggsave("results/SM_signature.pdf",
+       plot = p, 
+       width = 17,
+       height = 15,
+       dpi = 300,
+       units = "cm")
+
+
+##------------------------------------------------------------------------------------
+## KeggStats
+
+df <- confect_df
+  
+bm <- getBM(filters = "hgnc_symbol", attributes = c("ensembl_gene_id", "entrezgene_id",
+    "hgnc_symbol"), values = df$Symbol, mart = mart)
+  
+df$EntrezID <- bm$entrezgene_id[match(df$Symbol, bm$hgnc_symbol)]
+df$EnsemblID <- bm$ensembl_gene_id[match(df$Symbol, bm$hgnc_symbol)]
+  
+universe.entrez <- df %>%
+    drop_na(EntrezID) %>%
+    pull(EntrezID) 
+  
+up.entrez <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    drop_na(EntrezID) %>%
+    pull(EntrezID) 
+  
+down.entrez <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    drop_na(EntrezID) %>%
+    pull(EntrezID) 
+  
+banner("keggStat", "*")
+  
+kegg.up <- keggStats(up.entrez, universe.entrez, species = "hsapiens", hgCutoff = 0.001)
+kegg.up$direction <- "up"
+kegg.down <- keggStats(down.entrez, universe.entrez, species = "hsapiens", hgCutoff = 0.001)
+kegg.down$direction <- "down"
+kegg.down$OddsRatio <- 0 - kegg.down$OddsRatio
+  
+p_dat <- bind_rows(kegg.up, kegg.down) %>%
+    group_by(direction) %>%
+    arrange(desc(OddsRatio)) %>%
+    filter(Pvalue < 0.05) %>%
+    ungroup() %>%
+    filter(row_number() > max(row_number()) - 5 | row_number() <= 5) %>%
+    mutate(col = ifelse(OddsRatio > 0, "#E41A1C", "#377EB8")) %>%
+    mutate(Pathway = gsub("\\ - .*", "", Pathway)) 
+
+
+p <- ggplot(p_dat,
+            aes(x = reorder(Pathway, OddsRatio), y = OddsRatio)) + 
+    geom_col(aes(fill = col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "",
+         y = "Odds Ratio", 
+         title = paste("KeggStats")) +
+  theme_classic()+
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text.x = element_text(size = 12), 
+          axis.text.y = element_blank(), 
+          axis.title = element_text(face = "bold",
+                                    size = 12),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank()
+          ) + 
+    scale_fill_identity() +
+    geom_text(
+    aes(label = reorder(Pathway, OddsRatio),
+    y = ifelse(p_dat$OddsRatio < 0, 0.1, -0.1)),
+    hjust = ifelse(p_dat$OddsRatio < 0, 0, 1),
+    color = "black"
+  ) +
+  geom_hline(yintercept = 0)
+  
+print(p)
+
+ggsave("results/keggstat_plot.pdf",
+       plot = p, 
+       width = 14,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## GSEA analysis
+
+banner("GSEA: Hallmarks")
+hm <- GSEAStats(df, 
+          species ="hsapiens", 
+          GSEA_terms = "H", 
+          top_n = 10)
+hm$gsea_p
+p <- hm$plot + ggtitle("hallmarks")
+print(p)
+
+banner("GSEA: Curated genesets")
+c2 <- GSEAStats(df, 
+          species ="hsapiens", 
+          GSEA_terms = "c2", 
+          top_n = 5)
+c2$gsea_p
+p <- c2$plot + ggtitle("Curated genesets")
+print(p)
+
+banner("GSEA: Ontology genesets")
+c5 <- GSEAStats(df, 
+          species ="hsapiens", 
+          GSEA_terms = "c5", 
+          top_n = 5)
+c5$gsea_p
+p <- c5$plot + ggtitle("Ontology genesets")
+print(p)
+
+banner("GSEA: Oncogenic signature")
+c6 <- GSEAStats(df, 
+          species ="hsapiens", 
+          GSEA_terms = "c6", 
+          top_n = 5)
+c6$gsea_p
+p <- c6$plot + ggtitle("Oncogenic signature")
+print(p)
+
+##------------------------------------------------------------------------------------
+## g:ProfilerR
+universe.ens <- df %>%
+    drop_na(EnsemblID) %>%
+    pull(EnsemblID) 
+  
+up.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect > 0) %>%
+    drop_na(EnsemblID) %>%
+    pull(EnsemblID) 
+  
+down.ens <- df %>%
+    filter(confidence != "not significant") %>%
+    filter(confect < 0) %>%
+    drop_na(EnsemblID) %>%
+    pull(EnsemblID) 
+
+# gost query
+gostres <- gost(query = up.ens, 
+                organism = "hsapiens", 
+                significant = TRUE,
+                correction_method = "fdr", 
+                sources = c("GO", "KEGG", "REAC", "WP"),
+                evcodes = TRUE,
+                user_threshold = 0.001)
+  
+## gost results
+pathway_gostres_up <- gostres$result %>%
+  as.data.frame() %>%
+  filter(significant) %>%
+  mutate(direction = "up")
+
+# gost query
+gostres <- gost(query = down.ens, 
+                organism = "hsapiens", 
+                significant = TRUE,
+                correction_method = "fdr", 
+                sources = c("GO", "KEGG", "REAC", "WP"),
+                evcodes = TRUE,
+                user_threshold = 0.001)
+  
+## gost results
+pathway_gostres_down <- gostres$result %>%
+  as.data.frame() %>%
+  filter(significant) %>%
+  mutate(direction = "down") 
+
+## merge results
+p_dat <- bind_rows(pathway_gostres_up, pathway_gostres_down) %>%
+    mutate(log10Pvalue = -log10(p_value)) %>%
+    mutate(log10Pvalue = ifelse(direction == "down", 0- log10Pvalue, log10Pvalue)) %>%
+    group_by(direction) %>%
+    arrange(desc(log10Pvalue)) %>%
+    filter(p_value < 0.05) %>%
+    ungroup() %>%
+    filter(row_number() > max(row_number()) - 10 | row_number() <= 10) %>%
+    mutate(col = ifelse(log10Pvalue > 0, "#E41A1C", "#377EB8")) 
+
+p <- ggplot(p_dat, 
+            aes(x = reorder(term_name, log10Pvalue), y = log10Pvalue)) + 
+    geom_col(aes(fill = col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "",
+         y = "-log10(P value)", 
+         title = paste("Pathway enrichment")) +
+    theme_classic() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text.x = element_text(size = 12), 
+          axis.text.y = element_blank(), 
+          axis.title = element_text(face = "bold",
+                                    size = 12),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank()
+          ) + 
+    scale_fill_identity() +
+    geom_text(
+    aes(label = reorder(term_name, log10Pvalue),
+    y = ifelse(p_dat$log10Pvalue < 0, 0.1, -0.1)),
+    position = position_dodge(width = 0.9),
+    hjust = ifelse(p_dat$log10Pvalue < 0, 0, 1),
+    color = "black",
+    size=3
+  ) +
+  geom_hline(yintercept = 0)
+  
+print(p)
+
+ggsave("results/go_plot.pdf",
+       plot = p, 
+       width = 14,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+##------------------------------------------------------------------------------------
+## Geneset enrichment
+bptop <- myTopGoBP(up.ens, df, species = "hsapiens")
+bptop$GO <- "BP"
+bptop$direction <- "up"
+bpdown <- myTopGoBP(down.ens, df, species = "hsapiens")
+bpdown$GO <- "BP"
+bpdown$direction <- "down"
+
+mftop <- myTopGoMF(up.ens, df, species = "hsapiens")
+mftop$GO <- "MF"
+mftop$direction <- "up"
+mfdown <- myTopGoMF(down.ens, df, species = "hsapiens")
+mfdown$GO <- "MF"
+mfdown$direction <- "down"
+
+cctop <- myTopGoCC(up.ens, df, species = "hsapiens")
+cctop$GO <- "CC"
+cctop$direction <- "up"
+ccdown <- myTopGoCC(down.ens, df, species = "hsapiens")
+ccdown$GO <- "CC"
+ccdown$direction <- "down"
+
+## merge results
+p_dat <- bind_rows(bptop, bpdown, mftop, mfdown, cctop, ccdown) %>%
+    mutate(log10Pvalue = -log10(as.numeric(Fisher.classic))) %>%
+    mutate(log10Pvalue = ifelse(direction == "down", 0- log10Pvalue, log10Pvalue)) %>%
+    group_by(direction, GO) %>%
+    arrange(desc(log10Pvalue)) %>%
+    filter(as.numeric(Fisher.classic) < 0.05) %>%
+    ungroup() %>%
+    group_by(GO) %>%
+    filter(row_number() > max(row_number()) - 10 | row_number() <= 10) %>%
+    ungroup() %>%
+    mutate(col = ifelse(log10Pvalue > 0, "#E41A1C", "#377EB8")) 
+
+banner("BP")
+p_bp <- ggplot(p_dat[p_dat$GO == "BP",], 
+            aes(x = reorder(Term, log10Pvalue), y = log10Pvalue)) + 
+    geom_col(aes(fill = col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "",
+         y = "-log10(P value)", 
+         title = paste("Geneset enrichment (BP)")) +
+    theme_classic() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text.x = element_text(size = 12), 
+          axis.text.y = element_blank(), 
+          axis.title = element_text(face = "bold",
+                                    size = 12),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank()
+          ) + 
+    scale_fill_identity() +
+    geom_text(
+    aes(label = reorder(Term, log10Pvalue),
+    y = ifelse(p_dat[p_dat$GO == "BP",]$log10Pvalue < 0, 0.1, -0.1)),
+    position = position_dodge(width = 0.9),
+    hjust = ifelse(p_dat[p_dat$GO == "BP",]$log10Pvalue < 0, 0, 1),
+    color = "black",
+    size=3
+  ) +
+  geom_hline(yintercept = 0)
+  
+print(p_bp)
+
+ggsave("results/go_bp_plot.pdf",
+       plot = p_bp, 
+       width = 14,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+banner("MF")
+p_mf <- ggplot(p_dat[p_dat$GO == "MF",], 
+            aes(x = reorder(Term, log10Pvalue), y = log10Pvalue)) + 
+    geom_col(aes(fill = col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "",
+         y = "-log10(P value)", 
+         title = paste("Geneset enrichment (MF)")) +
+    theme_classic() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text.x = element_text(size = 12), 
+          axis.text.y = element_blank(), 
+          axis.title = element_text(face = "bold",
+                                    size = 12),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank()
+          ) + 
+    scale_fill_identity() +
+    geom_text(
+    aes(label = reorder(Term, log10Pvalue),
+    y = ifelse(p_dat[p_dat$GO == "MF",]$log10Pvalue < 0, 0.1, -0.1)),
+    position = position_dodge(width = 0.9),
+    hjust = ifelse(p_dat[p_dat$GO == "MF",]$log10Pvalue < 0, 0, 1),
+    color = "black",
+    size=3
+  ) +
+  geom_hline(yintercept = 0)
+  
+print(p_mf)
+
+ggsave("results/go_mf_plot.pdf",
+       plot = p_mf, 
+       width = 14,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+banner("CC")
+p_cc <- ggplot(p_dat[p_dat$GO == "CC",], 
+            aes(x = reorder(Term, log10Pvalue), y = log10Pvalue)) + 
+    geom_col(aes(fill = col),
+             color = "black", 
+             show.legend = FALSE) + 
+    coord_flip() + 
+    labs(x = "",
+         y = "-log10(P value)", 
+         title = paste("Geneset enrichment (CC)")) +
+    theme_classic() + 
+    theme(plot.title = element_text(face = "bold", size = 12),
+          legend.position = "bottom", 
+          axis.text.x = element_text(size = 12), 
+          axis.text.y = element_blank(), 
+          axis.title = element_text(face = "bold",
+                                    size = 12),
+          axis.ticks.y = element_blank(),
+          axis.line.y = element_blank()
+          ) + 
+    scale_fill_identity() +
+    geom_text(
+    aes(label = reorder(Term, log10Pvalue),
+    y = ifelse(p_dat[p_dat$GO == "CC",]$log10Pvalue < 0, 0.1, -0.1)),
+    position = position_dodge(width = 0.9),
+    hjust = ifelse(p_dat[p_dat$GO == "CC",]$log10Pvalue < 0, 0, 1),
+    color = "black",
+    size=3
+  ) +
+  geom_hline(yintercept = 0)
+  
+print(p_cc)
+
+ggsave("results/go_cc_plot.pdf",
+       plot = p_cc, 
+       width = 14,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+##------------------------------------------------------------------------------------
+## network analysis
+net <- networkStats(df, species = "hsapiens", top_n = 1)
+
+print(net$map)
+
+grid.arrange(net$ind)
+
+
+##------------------------------------------------------------------------------------
+## metabolome analysis
+
+gsc <- loadGSC("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/GSC/HumanGEM_v1.5.0_ensembl_subsystems.gmt")
+
+tab <- df[!is.na(df$EnsemblID), ]
+
+## p values and logFC
+pval <- tab$padj %>% setNames(tab$EnsemblID)
+logfc <- tab$log2FoldChange %>% setNames(tab$EnsemblID)
+
+## run reporter statistics
+gsaRes <- runGSA(geneLevelStats=pval,
+                 directions=logfc,
+                 geneSetStat='tailStrength',
+                 signifMethod='geneSampling',
+                 gsc=gsc,
+                 nPerm=10000)
+
+## visualize the top most significant gene sets
+gsaRes_table <- GSAsummaryTable(gsaRes)
+
+gsaRes_table <- gsaRes_table[gsaRes_table$`Genes (tot)` > 50, ]
+
+
+table_sel <- gsaRes_table[, c('p adj (dist.dir.dn)', 'p adj (mix.dir.dn)', 'p adj (non-dir.)',
+                              'p adj (mix.dir.up)', 'p adj (dist.dir.up)')]
+table_sel[is.na(table_sel)] <- 1  # set NA p-values equal to 1
+rownames(table_sel) <- gsaRes_table$Name
+#table_sel <- table_sel[apply(table_sel, 1, min) < 0.05, ]
+
+table_sel <- ifelse(table_sel < 0.001, "***",
+                    ifelse(table_sel >= 0.001 & table_sel < 0.01, "**",
+                           ifelse(table_sel >= 0.01 & table_sel < 0.05, "*", "")))
+
+table_sel <-  table_sel[!apply(table_sel == "", 1, all),]
+
+table_stat <- gsaRes_table[, c('Stat (dist.dir.dn)', 'Stat (mix.dir.dn)', 'Stat (non-dir.)',
+                               'Stat (mix.dir.up)', 'Stat (dist.dir.up)')]
+
+table_stat[table_stat==-Inf] <- 0
+table_stat[table_stat==Inf] <- 0 # set Inf to 0
+rownames(table_stat) <-gsaRes_table$Name
+table_stat <- table_stat[rownames(table_stat) %in% rownames(table_sel),]
+
+heatmap.p <- pheatmap(table_stat, 
+                      scale='none',
+                      color=colorRampPalette(rev(brewer.pal(11, "RdBu")))(100),
+                      cluster_cols=FALSE,
+                      cluster_rows=FALSE,
+                      display_numbers = table_sel,
+                      border_color="grey",
+                      cellwidth = 10,
+                      cellheight = 10)
+
+print(heatmap.p)
+
+save_pheatmap_pdf(heatmap.p,
+                  "results/heatmap_metaboliteplot.pdf",
+                  width=6,
+                  height=8)
+
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```

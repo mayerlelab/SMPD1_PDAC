@@ -1,0 +1,1113 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__graph pad__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "metapacR",
+  "RColorBrewer",
+  "ggpubr",
+  "rstatix",
+  "drc",
+  "scales",
+  "FSA"
+  
+)
+
+#devtools::install_github("umahajanatlmu/metapacR", ref="master", auth_token = "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")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_graphpad")),
+       dir.create(file.path(paste0(here()), "results_graphpad")), FALSE)
+
+save_plot <- function(x, filename, width = 7, height = 7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    svg(filename, width = width, height = height)
+    grid::grid.newpage()
+    grid::grid.draw(x)
+    dev.off()
+}
+```
+
+# plot graphs
+
+## read files
+```{r}
+readxl::excel_sheets("compiled_data.xlsx")
+```
+## KC Smpd1 IHC
+```{r}
+ihc <- read_excel("compiled_data.xlsx", "KC_Smpd1_IHC")
+
+ihc$timepoint_num <- ifelse(ihc$timepoint == "3m", 1,
+                            ifelse(ihc$timepoint == "6m", 2,
+                            ifelse(ihc$timepoint =="12m",3, 4)))
+# 
+# error_data <- ihc %>%
+#   group_by(group, timepoint,timepoint_num) %>%
+#   summarise(mean = mean(percent_cells),
+#             sd = sd(percent_cells))
+
+ihc <- ihc[ihc$group == "total",]
+ihc$percent_cells <- as.numeric(ihc$percent_cells)
+ihc$timepoint <- factor(ihc$timepoint, levels=c("3m","6m", "12m", "Endpoint"))
+
+# p <- ggplot(ihc,
+#        aes(x=timepoint_num,
+#            y=percent_cells,
+#            group=group,
+#            fill=group)) +
+#   geom_smooth(aes(color=group), se=FALSE, size=2) +
+#   geom_errorbar(data = error_data,
+#                 aes(x = timepoint_num,
+#                     ymin = mean - sd,
+#                     ymax = mean + sd,
+#                     color=group),
+#                 width = 0.4,
+#                 position = position_dodge(width = 0.1),
+#                 size=2,
+#                 inherit.aes = FALSE) +
+#   geom_jitter(shape=21,
+#              size=3,
+#              color="black",
+#              alpha=0.5,
+#              width= 0.1,
+#              show.legend = FALSE) +
+#   scale_color_manual(values = c("#E41A1C","#377EB8", "#EF8A62")) +
+#   scale_fill_manual(values = c("#E41A1C","#377EB8", "#EF8A62")) +
+#   scale_x_continuous(breaks = c(1, 2, 3),
+#                      labels = c("2m", "3m", "Endpoint")) +
+#   labs(x = "",
+#        y = "Percent of Smpd1+ cells") +
+#   theme_bw()
+
+p <- ggplot(data = ihc, 
+            aes(x = timepoint, 
+                y = percent_cells)) +
+  # stat_summary(fun.y = "mean", 
+  #              geom = "col", 
+  #              fill="#E41A1C",
+  #              position = position_dodge(0.8),
+  #              color = "black",
+  #              alpha = 0.5) +
+  # geom_errorbar(stat = "summary", 
+  #               fun.data = "mean_sdl", 
+  #               position = position_dodge(0.8), 
+  #               width = 0.2) +
+  geom_boxplot(fill="#377EB8",
+               color = "black",
+               alpha = 0.5) +
+  geom_smooth(aes(x=timepoint_num), se=FALSE, color= "#377EB8", size=2) +
+  geom_jitter(shape = 21, 
+              fill="#E41A1C",
+             color = "black",
+             alpha = 0.5,
+             size = 3,
+             width = 0.25,
+             show.legend = FALSE) +
+  stat_compare_means(data=ihc, 
+                       aes(x= timepoint, 
+                           y=  percent_cells), 
+                       label = "..p..",
+                       method = "t.test",
+                       ref.group = "3m",
+                       show.legend = FALSE) +
+  theme_bw() +
+  xlab("") +
+  ylab("Percent of Smpd1+ cells") 
+
+
+print(p)
+
+ggsave("./results_graphpad/kc_smpd1_ihc.pdf",
+         plot = p, 
+         width = 9,
+         height = 7,
+         dpi = 300,
+         units = "cm")
+
+```
+
+## KPC Smpd1 IHC
+```{r}
+ihc <- read_excel("compiled_data.xlsx", "KPC_Smpd1_IHC")
+
+ihc$timepoint_num <- ifelse(ihc$timepoint == "2m", 1,
+                            ifelse(ihc$timepoint =="3m",2, 3))
+
+# error_data <- ihc %>%
+#   group_by(group, timepoint,timepoint_num) %>%
+#   summarise(mean = mean(percent_cells),
+#             sd = sd(percent_cells))
+
+ihc <- ihc[ihc$group == "total",]
+ihc$percent_cells <- as.numeric(ihc$percent_cells)
+ihc$timepoint <- factor(ihc$timepoint, levels=c("2m","3m", "Endpoint"))
+
+# p <- ggplot(ihc,
+#        aes(x=timepoint_num,
+#            y=percent_cells,
+#            group=group,
+#            fill=group)) +
+#   geom_smooth(aes(color=group), se=FALSE, size=2) +
+#   geom_errorbar(data = error_data,
+#                 aes(x = timepoint_num,
+#                     ymin = mean - sd,
+#                     ymax = mean + sd,
+#                     color=group),
+#                 width = 0.4,
+#                 position = position_dodge(width = 0.1),
+#                 size=2,
+#                 inherit.aes = FALSE) +
+#   geom_jitter(shape=21,
+#              size=3,
+#              color="black",
+#              alpha=0.5,
+#              width= 0.1,
+#              show.legend = FALSE) +
+#   scale_color_manual(values = c("#E41A1C","#377EB8", "#EF8A62")) +
+#   scale_fill_manual(values = c("#E41A1C","#377EB8", "#EF8A62")) +
+#   scale_x_continuous(breaks = c(1, 2, 3),
+#                      labels = c("2m", "3m", "Endpoint")) +
+#   labs(x = "",
+#        y = "Percent of Smpd1+ cells") +
+#   theme_bw()
+
+p <- ggplot(data = ihc, 
+            aes(x = timepoint, 
+                y = percent_cells)) +
+    # stat_summary(fun.y = "mean", 
+  #              geom = "col", 
+  #              fill="#E41A1C",
+  #              position = position_dodge(0.8),
+  #              color = "black",
+  #              alpha = 0.5) +
+  # geom_errorbar(stat = "summary", 
+  #               fun.data = "mean_sdl", 
+  #               position = position_dodge(0.8), 
+  #               width = 0.2) +
+  geom_boxplot(fill="#377EB8",
+               color = "black",
+               alpha = 0.5) +
+  geom_smooth(aes(x=timepoint_num), se=FALSE, color= "#EF8A62", size=2) +
+  geom_jitter(shape = 21, 
+              fill="#E41A1C",
+             color = "black",
+             alpha = 0.5,
+             size = 3,
+             #width = 0.25,
+             show.legend = FALSE) +
+  stat_compare_means(data=ihc, 
+                       aes(x= timepoint, 
+                           y=  percent_cells), 
+                       label = "..p..",
+                       method = "t.test",
+                       ref.group = "2m",
+                       show.legend = FALSE) +
+  theme_bw() +
+  xlab("") +
+  ylab("Percent of Smpd1+ cells") 
+
+
+print(p)
+
+ggsave("./results_graphpad/kpc_smpd1_ihc.pdf",
+         plot = p, 
+         width = 9,
+         height = 7,
+         dpi = 300,
+         units = "cm")
+
+```
+## proliferation
+```{r}
+prol <- read_excel("compiled_data.xlsx", "Proliferation")
+
+for (i in unique(prol$cell_line)) {
+  prol_subset <- prol[prol$cell_line %in% i, ]
+  
+  # plot
+  prol_subset_summary <- prol_subset %>%
+    group_by(time, clone) %>%
+    summarize(mean=mean(value),
+              sd= sd(value)) %>%
+    ungroup()
+  
+  p <- ggplot() +
+    geom_jitter(data=prol_subset, 
+                aes(x= time, 
+                    y= value, 
+                    fill=clone_id),
+                size=3, 
+                width = 1, 
+                shape = 21, 
+                color= "black",
+                alpha= 0.8) +
+    geom_line(data=prol_subset_summary, aes(x= time, y= mean, color=clone), lwd=1.5) +
+    geom_errorbar(data=prol_subset_summary, aes(x= time, y= mean, color=clone, ymax=mean+sd, ymin=mean-sd), lwd=1.5, alpha=0.8, width = 2, show.legend = FALSE) +
+    scale_color_manual(values = c("#E41A1C","#377EB8")) +
+    stat_compare_means(data=prol_subset, 
+                       aes(x= time, 
+                           y= value, 
+                           group = clone), 
+                       label = "..p..",
+                       show.legend = FALSE) +
+    scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+    theme_bw() +
+    scale_x_continuous(breaks = c(0, 24, 48, 72), labels = c(0, 24, 48, 72)) +
+    xlab("") +
+    ylab("relative changes in proliferation") +
+    ggtitle(paste("Influence of Smpd1-/- on proliferation:", i)) 
+  
+  print(p)
+  ggsave(paste0("./results_graphpad/", "proliferation_",i, ".pdf"),
+         plot = p, 
+         width = 12,
+         height = 9,
+         dpi = 300,
+         units = "cm")
+}
+
+```
+## inhibitor
+```{r}
+inh <- read_excel("compiled_data.xlsx", "inhibitor")
+inh$group1 <- paste0(inh$dose, "_", inh$group)
+
+# plot
+inh_summary <- inh %>%
+  group_by(time, group, group1) %>%
+  summarize(mean=mean(value),
+            sd= sd(value)) %>%
+  ungroup()
+
+p <- ggplot() +
+  geom_jitter(data=inh, 
+              aes(x= time, 
+                  y= value, 
+                  fill=group1),
+              size=3, 
+              width = 1, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  facet_wrap(~group) +
+  geom_line(data=inh_summary, aes(x= time, y= mean, color=group1), lwd=1.5, show.legend=FALSE) +
+  geom_errorbar(data=inh_summary, aes(x= time, y= mean, color=group1, ymax=mean+sd, ymin=mean-sd), lwd=1.5, alpha=0.8, width = 4, show.legend = FALSE) +
+  scale_color_manual(values = c("#2166AC","#4393C3", "#92C5DE","#F4A582","#D6604D","#B2182B","#67001F")) +
+  stat_compare_means(data=inh, 
+                     aes(x= time, 
+                         y= value, 
+                         group = group1), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#2166AC","#4393C3", "#92C5DE","#F4A582","#D6604D","#B2182B","#67001F" )) +
+  theme_bw() +
+  scale_x_continuous(breaks = c(0, 24, 48, 72, 96), labels = c(0, 24, 48, 72, 96)) +
+  xlab("") +
+  ylab("relative changes in proliferation") +
+  ggtitle("Influence of Smpd1 on proliferation") 
+
+print(p)
+ggsave("./results_graphpad/ARC39_SMPD1_inhibitor.pdf",
+       plot = p, 
+       width = 15,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## colony formation
+```{r}
+colony <- read_excel("compiled_data.xlsx", "colony_formation")
+colony$clone <- factor(colony$clone, levels=c("WT", "KO"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("% of cells seeded") +
+  ggtitle("Colony formation: KPC1050") 
+
+print(p)
+
+ggsave("./results_graphpad/colony_formation.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+```
+
+
+
+
+## migration
+```{r}
+migration <- read_excel("compiled_data.xlsx", "migration")
+migration$clone <- factor(migration$clone, levels=c("WT", "KO"))
+
+p <- ggplot(data=migration) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=migration, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Closed gap in %") +
+  ggtitle("Migration") 
+
+print(p)
+
+ggsave("./results_graphpad/migration.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## gemcitabine response
+```{r}
+inh <- read_excel("compiled_data.xlsx", "gem_response")
+
+# plot
+inh_summary <- inh %>%
+  group_by(dose, clone) %>%
+  summarize(mean=mean(value),
+            sd= sd(value),
+            sem = sd(value) / sqrt(n())) %>%
+  ungroup()
+
+p <- ggplot(data=inh, 
+              aes(x= dose, 
+                  y= value, 
+                  fill=clone_id)) +
+  ggbeeswarm::geom_beeswarm(cex=1,
+                            shape=21,
+              color= "black",
+              alpha= 0.8) +
+  geom_errorbar(data=inh_summary, aes(x= dose, y= mean, color=clone, ymax=mean+sem, ymin=mean-sem), lwd=1.5, alpha=0.8, width = 0.2, show.legend = FALSE, inherit.aes = FALSE) +
+  scale_color_manual(values = c("#E41A1C","#377EB8")) +
+  scale_fill_manual(values =  c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  scale_x_continuous(breaks = log_breaks(n = 10), trans= log10_trans(), 
+                     labels=function(n){format(round(n, 4), scientific = FALSE)})+
+  scale_y_continuous(expand = c(0, 0), limits = c(0,125)) +
+  stat_smooth(data=inh_summary, aes(x= dose, y= mean, color=clone), lwd=1.5, method = "drm", method.args = list(fct = L.4(names = c("hill", "min_value", "max_value", "ec_50"))), se = FALSE, inherit.aes = FALSE) +
+  geom_hline(yintercept=50, lty="dotted") +
+  annotation_logticks(sides = "b") +
+  ylab("relative changes in proliferation") +
+  ggtitle("Influence of Smpd1 on proliferation") 
+
+# statistics
+
+d<-aov(value ~  as.factor(clone)* as.factor(dose), data=inh)
+TukeyHSD(d, ordered = TRUE)
+
+# curve comparison (Ritz et al, PLos)
+ED50.1 <- drm(value ~ dose, clone, data = inh, fct = LL.4(names = c("b", "lower", "upper", "ed50")))
+summary(ED50.1)
+
+ed6606<- ED(ED50.1, c(50), interval = "delta")
+
+compParm(ED50.1, "ed50", "-")
+
+
+print(p)
+ggsave("./results_graphpad/gem_resistance.pdf",
+       plot = p, 
+       width = 12,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+```
+
+## orthotopic injection
+```{r}
+colony <- read_excel("compiled_data.xlsx", "orthotype")
+colony$clone <- factor(colony$clone, levels=c("WT", "KO"))
+colony$genotye <- factor(colony$genotye, levels=c("WT", "Smpd1-het"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Tumor weight in mg") +
+  ggtitle("Tumor weight") +
+  facet_wrap(~genotye)
+
+print(p)
+
+ggsave("./results_graphpad/orthotypic_tumor_weight.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+
+
+## lung metastases
+```{r}
+colony <- read_excel("compiled_data.xlsx", "lung_met")
+colony$clone <- factor(colony$clone, levels=c("WT", "KO"))
+colony$group <- factor(colony$group, levels=c("Control","WT", "Smpd1-het"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Tumor weight in mg") +
+  ggtitle("Lung Metastases") +
+  facet_grid(~group,
+             scales="free_x",
+             space='free_x')
+
+print(p)
+
+ggsave("./results_graphpad/tail_vein_injection.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+
+
+## liver metastases
+```{r}
+colony <- read_excel("compiled_data.xlsx", "liver_met")
+colony$clone <- factor(colony$clone, levels=c("WT", "KO"))
+colony$group <- factor(colony$group, levels=c("Control","WT", "Smpd1-het"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Liver Weight/Body Weight (%)") +
+  ggtitle("Liver Metastases") +
+  facet_grid(~group,
+             scales="free_x",
+             space='free_x')
+
+print(p)
+
+ggsave("./results_graphpad/splenic_injection.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+
+
+
+## gem_nab_pac
+```{r}
+colony <- read_excel("compiled_data.xlsx", "Gem_nab_Pac")
+colony$clone <- factor(colony$clone, levels=c("WT", "KO"))
+colony$group <- factor(colony$group, levels=c("Control","Treatment"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= value,
+                  fill=group), 
+               color="black",
+               show.legend = TRUE,
+  position = position_dodge(0.8) ) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_point(aes(x= clone, 
+                  y= value, 
+                  fill=clone_id,
+                 group=group),
+              size=3, 
+              position = position_jitterdodge(0.2), 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Tumor weight in mg") +
+  ggtitle("Gem-Nab_Pac")
+
+print(p)
+
+ggsave("./results_graphpad/gem_nab_pac.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## survival: Orthotopic tumor
+```{r}
+library(survival)
+library(survminer)
+survival_data <- read_excel("compiled_data.xlsx", "survival")
+survival_data <- survival_data[survival_data$group == "Control",]
+survival_data$clone <- factor(survival_data$clone, levels=c("WT", "KO"))
+
+survival_fit <- survfit(Surv(OS, status) ~ clone, data = survival_data)
+
+# Plot the Kaplan-Meier curves for WT and KO
+p <- ggsurvplot(survival_fit, 
+                pval = TRUE,
+                size=2,
+                palette  = c("#377EB8","#E41A1C")) +
+  theme_survminer(legend = "none")
+
+ggsave("./results_graphpad/survival_main.pdf",
+       plot = p$plot, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+subset_data <- subset(survival_data, clone_id %in% setdiff(unique(survival_data$clone_id), "WT"))
+
+survival_fit_subset <- survfit(Surv(OS, status) ~ clone_id, data = subset_data)
+
+p1 <-ggsurvplot(survival_fit_subset, 
+                alpha = 0.8,
+                palette  = c("#B2182B","#EF8A62","#FDDBC7")) +
+  theme_survminer(legend = "none")
+
+ggsave("./results_graphpad/survival_sub.pdf",
+       plot = p1$plot, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## survival: KC
+```{r}
+survival_data <- read_excel("compiled_data.xlsx", "KC_survival")
+survival_data$genotype <- factor(survival_data$genotype, levels=c("KC", "KC-Smpd1"))
+
+survival_fit <- survfit(Surv(OS, status) ~ genotype, data = survival_data)
+
+# Plot the Kaplan-Meier curves for WT and KO
+p <- ggsurvplot(survival_fit, 
+                pval = TRUE,
+                size=2,
+                palette  = c("#377EB8","#E41A1C")) +
+  theme_survminer(legend = "none")
+
+ggsave("./results_graphpad/kc_survival_main.pdf",
+       plot = p$plot, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## MRTX1133
+```{r}
+colony <- read_excel("compiled_data.xlsx", "MRTX1133")
+#colony$genotype <- factor(colony$genotype, levels=c("WT", "KO"))
+#colony$genotye <- factor(colony$genotye, levels=c("WT", "Smpd1-het"))
+
+extract_all_comparisons <- function(.tbl) {
+  .tbl %>%
+    dplyr::select(.data$group1, .data$group2) %>%
+    purrr::transpose() %>%
+    purrr::modify_depth(1, unlist)
+}
+
+colony$merged_col <- paste0(colony$genotype, "_", colony$group)
+
+colony$merged_col <- factor(colony$merged_col, levels=c("WT_Control", "WT_MRTX1133", "KO_Control", "KO_MRTX1133"))
+
+ttests <- colony %>%
+ t_test(value ~ merged_col) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance() 
+
+ttests <- ttests %>%
+  filter(group1 == "WT_Control" & group2=="WT_MRTX1133" |
+           group1 == "KO_Control" & group2=="KO_MRTX1133" |
+           group1 == "WT_MRTX1133" & group2=="KO_MRTX1133")
+
+p <- ggplot(data=colony,
+            aes(x= merged_col, 
+                  y= value)) +
+  geom_boxplot(aes(fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_point(aes(fill=clone,
+                 group = group),
+              size=3, 
+             position = position_jitterdodge(0.4), 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(comparisons = extract_all_comparisons(ttests), 
+                     label = "p.adj",
+                     method = "t.test",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Change in Proliferation (% of Control") +
+  ggtitle("MRTX1133 response") 
+
+print(p)
+
+ggsave("./results_graphpad/MRTX1133_response.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## ARC39
+```{r}
+colony <- read_excel("compiled_data.xlsx", "ARC39")
+colony$group <- factor(colony$group, levels=c("Control","ARC39"))
+
+colony <- colony[!colony$cell_line %in% c( "Panc-1", "Capan2"),]
+
+# Pairwise t-test between groups
+stat.test <- compare_means(
+  value ~ group, 
+  data = colony, 
+  group.by = "cell_line",
+  method = "t.test", 
+  ref.group = "Control"
+)
+
+stat.test
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= cell_line, 
+                  y= value,
+                  fill=group), 
+               color="black",
+               show.legend = TRUE,
+  position = position_dodge(0.8) ) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_point(aes(x= cell_line, 
+                  y= value, 
+                  fill=group,
+                 group=group),
+              position = position_jitterdodge(0.2), 
+              shape = 21, 
+              color= "black",
+              alpha= 0.5) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_bw() +
+  xlab("") +
+  ylab("relative changes in proliferation") +
+  ggtitle("ARC39") +
+  facet_grid(~subtype,
+             scales="free_x",
+             space='free_x')
+  
+
+print(p)
+
+ggsave("./results_graphpad/arc39.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## activity Smpd1
+```{r}
+colony <- read_excel("compiled_data.xlsx", "cell_lines_activity")
+#colony$group <- factor(colony$group, levels=c("Control","ARC39"))
+
+colony <- colony[!colony$cell_line %in% c( "Panc1", "Capan2"),]
+
+# Pairwise t-test between groups
+stat.test <- compare_means(
+  value ~ subtype, 
+  data = colony, 
+  #group.by = "cell_line",
+  method = "t.test"
+)
+
+stat.test
+
+p <- ggplot(data = colony, 
+            aes(x = cell_line, 
+                y = value, 
+                fill = subtype)) +
+  stat_summary(fun.y = "mean", 
+               geom = "col", 
+               position = position_dodge(0.8),
+               color = "black",
+               alpha = 0.8) +
+  geom_errorbar(stat = "summary", 
+                fun.data = "mean_sdl", 
+                position = position_dodge(0.8), 
+                width = 0.5) +
+  geom_point(aes(x = cell_line, 
+                 y = value, 
+                 fill = subtype),
+             position = position_jitterdodge(0.2), 
+             shape = 21, 
+             color = "black",
+             alpha = 0.5,
+             size = 3,
+             show.legend = FALSE) +
+  scale_fill_manual(values = c("#E41A1C", "#377EB8")) +
+  theme_bw() +
+  xlab("") +
+  ylab("relative SMPD1 activity") +
+  ggtitle("SMPD1 activity") +
+  facet_grid(~subtype,
+             scales = "free_x",
+             space = 'free_x')
+
+print(p)
+
+ggsave("./results_graphpad/activity.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## activity Smpd1 Ko
+```{r}
+colony <- read_excel("compiled_data.xlsx", "Smpd1_KO_activity")
+
+for (i in unique(colony$cell_line)) {
+  
+  colony_df = colony[colony$cell_line %in% i, ]
+  
+  colony_df$clone_id = relevel(factor(colony_df$clone_id), ref= "WT")
+  
+  p <- ggplot(data = colony_df, 
+            aes(x = clone_id, 
+                y = value, 
+                fill = clone_id)) +
+  stat_summary(fun.y = "mean", 
+               geom = "col", 
+               position = position_dodge(0.8),
+               color = "black",
+               alpha = 0.8) +
+  geom_errorbar(stat = "summary", 
+                fun.data = "mean_sdl", 
+                position = position_dodge(0.8), 
+                width = 0.5) +
+  geom_point(aes(x = clone_id, 
+                 y = value, 
+                 fill = clone_id),
+             position = position_jitterdodge(0.2), 
+             shape = 21, 
+             color = "black",
+             alpha = 0.5,
+             size = 3,
+             show.legend = FALSE) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Relative fold changes in Smpd1 activity") +
+  ggtitle(paste("SMPD1 activity", i)) +
+  stat_compare_means(data=colony_df, 
+                       aes(x= clone_id, 
+                           y=  value), 
+                       label = "..p..",
+                       method = "t.test",
+                       ref.group = "WT",
+                       show.legend = FALSE)
+
+print(p)
+
+ggsave(paste0("./results_graphpad/activity_ko_",i,".pdf"),
+       plot = p, 
+       width = 8,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+  
+}
+```
+
+## Smpd1 IF
+```{r}
+colony <- read_excel("../../Data/SMPD1_CEr_Human_cells_IF/Smpd1&Cermide-intensity-human cell lines.xlsx", .name_repair = "check_unique")
+
+colony <- colony %>%
+  group_by(Cell_line, Cell_Nr) %>%
+  summarize_if(is.numeric, funs(.[Protein == "Cermaide"] / .[Protein == "SMPD1"])) %>%
+  ungroup
+
+colony$Cell_line <- factor(colony$Cell_line, levels=c("PatuT", "Miapaca","Capan1","PatuS"))
+
+colony$group <- ifelse(colony$Cell_line %in% c("PatuT", "Miapaca"), "basal", "classical")
+
+stat.test <- colony %>% 
+ wilcox_test(Intensity ~ Cell_line) %>%
+  add_xy_position(
+          x = "Cell_line",
+          step.increase = 0.15
+        )
+
+p <- ggplot(colony,
+            aes(x=Cell_line,
+                y=Intensity,
+                fill=Cell_line)
+            ) +
+  geom_boxplot(show.legend = FALSE) +
+  geom_jitter(
+          shape = 21,
+          size = 2,
+          color = "black",
+          alpha = 0.3,
+          show.legend = FALSE
+        ) +
+  # stat_pvalue_manual(
+  #         stat.test,
+  #         label = "p",
+  #         tip.length = 0.01,
+  #         color = "gray50",
+  #         size = 4,
+  #         bracket.size = 0.6,
+  #         inherit.aes = FALSE
+  #       ) +
+  xlab("") +
+  ylab("CER/SM ratio for Normalized Intensity") +
+  theme_bw() +
+  theme(
+    axis.line = element_line(size = 0.5),
+    axis.text = element_text(
+      size = 11,
+      face = "bold",
+      colour = "black"
+    ),
+    axis.title = element_text(size = 12, face = "bold")
+  ) +
+  scale_fill_manual(values=c("#E41A1C","#E41A1C","#377EB8","#377EB8")) 
+
+
+print(p)
+
+ggsave("./results_graphpad/Smpd1_IF_intensity.pdf",
+       plot = p, 
+       width = 8,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+## Kras IF
+```{r}
+dat_pm <- read.csv("../../Data/KRAS_IF/output/Intensity_CellmembraneArea.csv")
+dat_pm$subcell <- "Plasma membrane"
+dat_cyt <- read.csv("../../Data/KRAS_IF/output/Intensity_CytoplasmArea.csv")
+dat_cyt$subcell <- "Cytoplasm"
+
+
+
+dat <- dat_pm %>%
+  bind_rows(dat_cyt) %>%
+  group_by(Metadata_Clone, Metadata_Cell_Nr, subcell) %>%
+  summarise(mean_value = median(Intensity_MedianIntensity_Kras)) %>%
+  ungroup() %>%
+  filter(subcell == "Plasma membrane")
+
+dat$Metadata_Clone <- factor(dat$Metadata_Clone, levels=c("WT", "C3", "C5","C6"))
+dat$group <- ifelse(dat$Metadata_Clone %in% "WT", "WT","KO")
+dat$group <- factor(dat$group, levels=c("WT", "KO"))
+
+p <- ggplot(data=dat) +
+  geom_boxplot(aes(x= group, 
+                  y= mean_value,
+                  fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= group, 
+                  y= mean_value, 
+                  fill=Metadata_Clone),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=dat, 
+                     aes(x= group, 
+                         y= mean_value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  theme_bw() +
+  xlab("") +
+  ylab("Median fluorescence Intensity [AU]") +
+  ggtitle("Kras accumulation") 
+
+
+print(p)
+
+ggsave("./results_graphpad/kras_if.pdf",
+       plot = p, 
+       width = 8,
+       height = 6,
+       dpi = 300,
+       units = "cm")
+```
+
+# computing environment
+
+```{r}
+sessionInfo()
+```
