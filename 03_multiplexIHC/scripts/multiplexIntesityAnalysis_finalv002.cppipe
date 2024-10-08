@@ -1,0 +1,877 @@
+CellProfiler Pipeline: http://www.cellprofiler.org
+Version:5
+DateRevision:421
+GitHash:
+ModuleCount:49
+HasImagePlaneDetails:False
+
+Images:[module_num:1|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:['To begin creating your project, use the Images module to compile a list of files and/or folders that you want to analyze. You can also specify a set of rules to include only the desired files in your selected folders.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    :
+    Filter images?:Images only
+    Select the rule criteria:and (extension does isimage) (directory doesnot containregexp "[\\\\/]\\.")
+
+Metadata:[module_num:2|svn_version:'Unknown'|variable_revision_number:6|show_window:False|notes:['The Metadata module optionally allows you to extract information describing your images (i.e, metadata) which will be stored along with your measurements. This information can be contained in the file name and/or location, or in an external file.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Extract metadata?:Yes
+    Metadata data type:Text
+    Metadata types:{}
+    Extraction method count:1
+    Metadata extraction method:Extract from file/folder names
+    Metadata source:File name
+    Regular expression to extract from file name:^(?P<Patient>.*)_(?P<Core>.*)_(?P<AB>.*)_(?P<ABname>.*)
+    Regular expression to extract from folder name:^(?P<Patient>.*)_(?P<Core>.*)_(?P<AB>.*)_(?P<ABname>.*)
+    Extract metadata from:All images
+    Select the filtering criteria:and (file does contain "")
+    Metadata file location:Elsewhere...|
+    Match file and image metadata:[]
+    Use case insensitive matching?:No
+    Metadata file name:
+    Does cached metadata exist?:No
+
+NamesAndTypes:[module_num:3|svn_version:'Unknown'|variable_revision_number:8|show_window:False|notes:['The NamesAndTypes module allows you to assign a meaningful name to each image by which other modules will refer to it.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Assign a name to:Images matching rules
+    Select the image type:Grayscale image
+    Name to assign these images:DNA
+    Match metadata:[{'SMPD1': 'Patient', 'CD8': 'Patient', 'HE': 'Patient', 'CERS2': 'Patient', 'CERS1': 'Patient', 'CD206': 'Patient', 'PHH3': 'Patient', 'CD68': 'Patient', 'CK19': 'Patient', 'CD3': 'Patient', 'CD45': 'Patient', 'SR': 'Patient'}, {'SMPD1': 'Core', 'CD8': 'Core', 'HE': 'Core', 'CERS2': 'Core', 'CERS1': 'Core', 'CD206': 'Core', 'PHH3': 'Core', 'CD68': 'Core', 'CK19': 'Core', 'CD3': 'Core', 'CD45': 'Core', 'SR': 'Core'}]
+    Image set matching method:Metadata
+    Set intensity range from:Image metadata
+    Assignments count:12
+    Single images count:0
+    Maximum intensity:255.0
+    Process as 3D?:No
+    Relative pixel spacing in X:1.0
+    Relative pixel spacing in Y:1.0
+    Relative pixel spacing in Z:1.0
+    Select the rule criteria:and (file does contain "HE")
+    Name to assign these images:HE
+    Name to assign these objects:Cell
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "SMPD1")
+    Name to assign these images:SMPD1
+    Name to assign these objects:Nucleus
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CD8")
+    Name to assign these images:CD8
+    Name to assign these objects:Cytoplasm
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CERS2")
+    Name to assign these images:CERS2
+    Name to assign these objects:Speckle
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CERS1")
+    Name to assign these images:CERS1
+    Name to assign these objects:Object1
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CD206")
+    Name to assign these images:CD206
+    Name to assign these objects:Object2
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "PHH3")
+    Name to assign these images:PHH3
+    Name to assign these objects:Object3
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CD68")
+    Name to assign these images:CD68
+    Name to assign these objects:Object4
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CK19")
+    Name to assign these images:CK19
+    Name to assign these objects:Object5
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CD3")
+    Name to assign these images:CD3
+    Name to assign these objects:Object6
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "CD45")
+    Name to assign these images:CD45
+    Name to assign these objects:Object7
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "SR")
+    Name to assign these images:SR
+    Name to assign these objects:Object8
+    Select the image type:Color image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+
+Groups:[module_num:4|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:['The Groups module optionally allows you to split your list of images into image subsets (groups) which will be processed independently of each other. Examples of groupings include screening batches, microtiter plates, time-lapse movies, etc.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Do you want to group your images?:No
+    grouping metadata count:1
+    Metadata category:Folder
+
+UnmixColors:[module_num:5|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:HE
+    Name the output image:unmix_nuclei
+    Stain:Hematoxylin
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:unmix_eosin
+    Stain:Eosin
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+
+IdentifyPrimaryObjects:[module_num:6|svn_version:'Unknown'|variable_revision_number:15|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:unmix_nuclei
+    Name the primary objects to be identified:NucleiObjects
+    Typical diameter of objects, in pixel units (Min,Max):6,30
+    Discard objects outside the diameter range?:Yes
+    Discard objects touching the border of the image?:Yes
+    Method to distinguish clumped objects:Shape
+    Method to draw dividing lines between clumped objects:Shape
+    Size of smoothing filter:10
+    Suppress local maxima that are closer than this minimum allowed distance:7.0
+    Speed up by using lower-resolution image to find local maxima?:Yes
+    Fill holes in identified objects?:After both thresholding and declumping
+    Automatically calculate size of smoothing filter for declumping?:Yes
+    Automatically calculate minimum allowed distance between local maxima?:Yes
+    Handling of objects if excessive number of objects identified:Continue
+    Maximum number of objects:500
+    Use advanced settings?:Yes
+    Threshold setting version:12
+    Threshold strategy:Adaptive
+    Thresholding method:Minimum Cross-Entropy
+    Threshold smoothing scale:1.10
+    Threshold correction factor:1.4
+    Lower and upper bounds on threshold:0.2, 1
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Two classes
+    Log transform before thresholding?:No
+    Assign pixels in the middle intensity class to the foreground or the background?:Foreground
+    Size of adaptive window:30
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Median
+    Variance method:Standard deviation
+    # of deviations:2
+    Thresholding method:Otsu
+
+ConvertObjectsToImage:[module_num:7|svn_version:'Unknown'|variable_revision_number:1|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:NucleiObjects
+    Name the output image:multiplex_nuclei
+    Select the color format:Color
+    Select the colormap:Spectral_r
+
+SaveImages:[module_num:8|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:multiplex_nuclei
+    Select method for constructing file names:Single name
+    Select image name for file prefix:None
+    Enter single file name:\g<Patient>_\g<Core>_nuclei_masks
+    Number of digits:4
+    Append a suffix to the image file name?:No
+    Text to append to the image name:
+    Saved file format:tiff
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/1_images/multiplex
+    Image bit depth:16-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:No
+    Base image folder:Elsewhere...|
+    How to save the series:T (Time)
+    Save with lossless compression?:Yes
+
+IdentifySecondaryObjects:[module_num:9|svn_version:'Unknown'|variable_revision_number:10|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:NucleiObjects
+    Name the objects to be identified:Cells
+    Select the method to identify the secondary objects:Watershed - Image
+    Select the input image:unmix_eosin
+    Number of pixels by which to expand the primary objects:20
+    Regularization factor:0.05
+    Discard secondary objects touching the border of the image?:No
+    Discard the associated primary objects?:No
+    Name the new primary objects:FilteredNuclei
+    Fill holes in identified objects?:Yes
+    Threshold setting version:12
+    Threshold strategy:Adaptive
+    Thresholding method:Minimum Cross-Entropy
+    Threshold smoothing scale:1.1
+    Threshold correction factor:0.9
+    Lower and upper bounds on threshold:0.0,1.0
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Two classes
+    Log transform before thresholding?:No
+    Assign pixels in the middle intensity class to the foreground or the background?:Foreground
+    Size of adaptive window:100
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Mean
+    Variance method:Standard deviation
+    # of deviations:2.0
+    Thresholding method:Otsu
+
+ConvertObjectsToImage:[module_num:10|svn_version:'Unknown'|variable_revision_number:1|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:Cells
+    Name the output image:multiplex_cytoplasm
+    Select the color format:Color
+    Select the colormap:Spectral_r
+
+SaveImages:[module_num:11|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:multiplex_cytoplasm
+    Select method for constructing file names:Single name
+    Select image name for file prefix:None
+    Enter single file name:\g<Patient>_\g<Core>_cytoplasm_masks
+    Number of digits:4
+    Append a suffix to the image file name?:No
+    Text to append to the image name:
+    Saved file format:tiff
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/1_images/multiplex
+    Image bit depth:16-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:No
+    Base image folder:Elsewhere...|
+    How to save the series:T (Time)
+    Save with lossless compression?:Yes
+
+IdentifyTertiaryObjects:[module_num:12|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the larger identified objects:Cells
+    Select the smaller identified objects:NucleiObjects
+    Name the tertiary objects to be identified:Cytoplasm
+    Shrink smaller object prior to subtraction?:Yes
+
+ConvertObjectsToImage:[module_num:13|svn_version:'Unknown'|variable_revision_number:1|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:Cells
+    Name the output image:multiplex
+    Select the color format:Color
+    Select the colormap:Spectral_r
+
+SaveImages:[module_num:14|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:multiplex
+    Select method for constructing file names:Single name
+    Select image name for file prefix:None
+    Enter single file name:\g<Patient>_\g<Core>_cell_masks
+    Number of digits:4
+    Append a suffix to the image file name?:No
+    Text to append to the image name:
+    Saved file format:tiff
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/1_images/multiplex
+    Image bit depth:16-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:No
+    Base image folder:Elsewhere...|
+    How to save the series:T (Time)
+    Save with lossless compression?:Yes
+
+UnmixColors:[module_num:15|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:SMPD1
+    Name the output image:unmix_Smpd1
+    Stain:AEC
+    Red absorbance:0.78
+    Green absorbance:0.65
+    Blue absorbance:0.64
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.79
+    Green absorbance:0.71
+    Blue absorbance:0.73
+
+UnmixColors:[module_num:16|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CD8
+    Name the output image:unmix_CD8
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.79
+    Green absorbance:0.71
+    Blue absorbance:0.73
+
+UnmixColors:[module_num:17|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CERS2
+    Name the output image:unmix_CERS2
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.61
+    Green absorbance:0.6
+    Blue absorbance:0.63
+
+UnmixColors:[module_num:18|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CERS1
+    Name the output image:unmix_CERS1
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.85
+    Green absorbance:0.77
+    Blue absorbance:0.76
+
+UnmixColors:[module_num:19|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CD206
+    Name the output image:unmix_CD206
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.66
+    Green absorbance:0.61
+    Blue absorbance:0.7
+
+ImageMath:[module_num:20|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:ImageAfterMath_CD206
+    Image or measurement?:Image
+    Select the first image:unmix_CD206
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CERS2
+    Multiply the second image by:1.0
+    Measurement:
+
+UnmixColors:[module_num:21|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:PHH3
+    Name the output image:unmix_PHH3
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.745
+    Green absorbance:0.686
+    Blue absorbance:0.71
+
+ImageMath:[module_num:22|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:ImageAfterMath_PHH3
+    Image or measurement?:Image
+    Select the first image:unmix_PHH3
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CERS1
+    Multiply the second image by:1.0
+    Measurement:
+
+UnmixColors:[module_num:23|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CD68
+    Name the output image:unmix_CD68
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.72
+    Green absorbance:0.694
+    Blue absorbance:0.77
+
+UnmixColors:[module_num:24|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CK19
+    Name the output image:unmix_CK19
+    Stain:Fast red
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.764
+    Green absorbance:0.7
+    Blue absorbance:0.689
+
+UnmixColors:[module_num:25|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CD3
+    Name the output image:unmix_CD3
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.67
+    Green absorbance:0.6
+    Blue absorbance:0.62
+
+ImageMath:[module_num:26|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:ImageAfterMath_CD3
+    Image or measurement?:Image
+    Select the first image:unmix_CD3
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CK19
+    Multiply the second image by:1.0
+    Measurement:
+
+UnmixColors:[module_num:27|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:2
+    Select the input color image:CD45
+    Name the output image:unmix_CD45
+    Stain:AEC
+    Red absorbance:0.5
+    Green absorbance:0.5
+    Blue absorbance:0.5
+    Name the output image:Hematoxylin
+    Stain:Custom
+    Red absorbance:0.686
+    Green absorbance:0.635
+    Blue absorbance:0.66
+
+ImageMath:[module_num:28|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:ImageAfterMath_CD45
+    Image or measurement?:Image
+    Select the first image:unmix_CD45
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CK19
+    Multiply the second image by:1.0
+    Measurement:
+
+MeasureObjectIntensity:[module_num:29|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select images to measure:ImageAfterMath_CD206, ImageAfterMath_CD3, ImageAfterMath_CD45, ImageAfterMath_PHH3, unmix_CD68, unmix_CD8, unmix_CERS1, unmix_CERS2, unmix_CK19, unmix_Smpd1, unmix_eosin, unmix_nuclei
+    Select objects to measure:Cells, Cytoplasm, NucleiObjects
+
+MeasureObjectSizeShape:[module_num:30|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select object sets to measure:Cells, Cytoplasm, NucleiObjects
+    Calculate the Zernike features?:Yes
+    Calculate the advanced features?:Yes
+
+ColorToGray:[module_num:31|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SR
+    Conversion method:Combine
+    Image type:RGB
+    Name the output image:OrigGray
+    Relative weight of the red channel:1.0
+    Relative weight of the green channel:1.0
+    Relative weight of the blue channel:1.0
+    Convert red to gray?:Yes
+    Name the output image:OrigRed
+    Convert green to gray?:Yes
+    Name the output image:OrigGreen
+    Convert blue to gray?:Yes
+    Name the output image:OrigBlue
+    Convert hue to gray?:Yes
+    Name the output image:OrigHue
+    Convert saturation to gray?:Yes
+    Name the output image:OrigSaturation
+    Convert value to gray?:Yes
+    Name the output image:OrigValue
+    Channel count:1
+    Channel number:1
+    Relative weight of the channel:1.0
+    Image name:Channel1
+
+ImageMath:[module_num:32|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Invert
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:SR_ImageAfterMath
+    Image or measurement?:Image
+    Select the first image:OrigGray
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CK19
+    Multiply the second image by:1.0
+    Measurement:
+
+ImageMath:[module_num:33|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:SR_ImageAfterMath2
+    Image or measurement?:Image
+    Select the first image:SR_ImageAfterMath
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:unmix_CK19
+    Multiply the second image by:1.0
+    Measurement:
+
+ImageMath:[module_num:34|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Invert
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:SR_ImageAfterMath3
+    Image or measurement?:Image
+    Select the first image:SR_ImageAfterMath2
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:None
+    Multiply the second image by:1.0
+    Measurement:
+
+Threshold:[module_num:35|svn_version:'Unknown'|variable_revision_number:12|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SR_ImageAfterMath3
+    Name the output image:SR_Threshold
+    Threshold strategy:Global
+    Thresholding method:Otsu
+    Threshold smoothing scale:0.0
+    Threshold correction factor:1.0
+    Lower and upper bounds on threshold:0.0,1.0
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Three classes
+    Log transform before thresholding?:Yes
+    Assign pixels in the middle intensity class to the foreground or the background?:Background
+    Size of adaptive window:50
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Mean
+    Variance method:Standard deviation
+    # of deviations:2.0
+    Thresholding method:Otsu
+
+MaskImage:[module_num:36|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SR
+    Name the output image:Maskcolor
+    Use objects or an image as a mask?:Image
+    Select object for mask:None
+    Select image for mask:SR_Threshold
+    Invert the mask?:Yes
+
+ColorToGray:[module_num:37|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:Maskcolor
+    Conversion method:Split
+    Image type:RGB
+    Name the output image:OrigGray
+    Relative weight of the red channel:1.0
+    Relative weight of the green channel:1.0
+    Relative weight of the blue channel:1.0
+    Convert red to gray?:Yes
+    Name the output image:SRred
+    Convert green to gray?:Yes
+    Name the output image:FGgreen
+    Convert blue to gray?:Yes
+    Name the output image:OrigBlueSRblue
+    Convert hue to gray?:Yes
+    Name the output image:OrigHue
+    Convert saturation to gray?:Yes
+    Name the output image:OrigSaturation
+    Convert value to gray?:Yes
+    Name the output image:OrigValue
+    Channel count:1
+    Channel number:1
+    Relative weight of the channel:1.0
+    Image name:Channel1
+
+ImageMath:[module_num:38|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Subtract
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:Yes
+    Name the output image:SR_ImageAfterMath4
+    Image or measurement?:Image
+    Select the first image:Maskcolor
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:FGgreen
+    Multiply the second image by:1.0
+    Measurement:
+
+ColorToGray:[module_num:39|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SR_ImageAfterMath4
+    Conversion method:Split
+    Image type:RGB
+    Name the output image:OrigGray
+    Relative weight of the red channel:1.0
+    Relative weight of the green channel:1.0
+    Relative weight of the blue channel:1.0
+    Convert red to gray?:Yes
+    Name the output image:SRred2
+    Convert green to gray?:No
+    Name the output image:OrigGreen
+    Convert blue to gray?:No
+    Name the output image:OrigBlue
+    Convert hue to gray?:Yes
+    Name the output image:OrigHue
+    Convert saturation to gray?:Yes
+    Name the output image:OrigSaturation
+    Convert value to gray?:Yes
+    Name the output image:OrigValue
+    Channel count:1
+    Channel number:1
+    Relative weight of the channel:1.0
+    Image name:Channel1
+
+UnmixColors:[module_num:40|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Stain count:1
+    Select the input color image:SR_ImageAfterMath4
+    Name the output image:SR_unmix
+    Stain:Custom
+    Red absorbance:1
+    Green absorbance:0
+    Blue absorbance:0
+
+ImageMath:[module_num:41|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Operation:Invert
+    Raise the power of the result by:1.0
+    Multiply the result by:1.0
+    Add to result:0.0
+    Set values less than 0 equal to 0?:Yes
+    Set values greater than 1 equal to 1?:Yes
+    Replace invalid values with 0?:Yes
+    Ignore the image masks?:No
+    Name the output image:SR_unmix2
+    Image or measurement?:Image
+    Select the first image:SR_unmix
+    Multiply the first image by:1.0
+    Measurement:
+    Image or measurement?:Image
+    Select the second image:FGgreen
+    Multiply the second image by:1.0
+    Measurement:
+
+MeasureImageIntensity:[module_num:42|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select images to measure:SRred2
+    Measure the intensity only from areas enclosed by objects?:No
+    Select input object sets:
+    Calculate custom percentiles:No
+    Specify percentiles to measure:10,90
+
+EnhanceOrSuppressFeatures:[module_num:43|svn_version:'Unknown'|variable_revision_number:7|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SRred2
+    Name the output image:SR_EnhanceOrSuppressFeatures
+    Select the operation:Enhance
+    Feature size:10
+    Feature type:Neurites
+    Range of hole sizes:1,10
+    Smoothing scale:2.0
+    Shear angle:0.0
+    Decay:0.95
+    Enhancement method:Line structures
+    Speed and accuracy:Fast
+    Rescale result image:Yes
+
+IdentifyPrimaryObjects:[module_num:44|svn_version:'Unknown'|variable_revision_number:15|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:SR_EnhanceOrSuppressFeatures
+    Name the primary objects to be identified:SR_IdentifyPrimaryObjects
+    Typical diameter of objects, in pixel units (Min,Max):1,400
+    Discard objects outside the diameter range?:No
+    Discard objects touching the border of the image?:No
+    Method to distinguish clumped objects:Intensity
+    Method to draw dividing lines between clumped objects:Intensity
+    Size of smoothing filter:50
+    Suppress local maxima that are closer than this minimum allowed distance:7.0
+    Speed up by using lower-resolution image to find local maxima?:No
+    Fill holes in identified objects?:Never
+    Automatically calculate size of smoothing filter for declumping?:No
+    Automatically calculate minimum allowed distance between local maxima?:Yes
+    Handling of objects if excessive number of objects identified:Continue
+    Maximum number of objects:500
+    Use advanced settings?:Yes
+    Threshold setting version:12
+    Threshold strategy:Global
+    Thresholding method:Minimum Cross-Entropy
+    Threshold smoothing scale:1.5
+    Threshold correction factor:1.0
+    Lower and upper bounds on threshold:0.05,1.0
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Two classes
+    Log transform before thresholding?:No
+    Assign pixels in the middle intensity class to the foreground or the background?:Foreground
+    Size of adaptive window:50
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Mean
+    Variance method:Standard deviation
+    # of deviations:2.0
+    Thresholding method:Otsu
+
+OverlayOutlines:[module_num:45|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Display outlines on a blank image?:No
+    Select image on which to display outlines:Maskcolor
+    Name the output image:SR_OrigOverlay
+    Outline display mode:Color
+    Select method to determine brightness of outlines:Max of image
+    How to outline:Inner
+    Select outline color:red
+    Select objects to display:SR_IdentifyPrimaryObjects
+
+MeasureImageAreaOccupied:[module_num:46|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Measure the area occupied by:Objects
+    Select binary images to measure:
+    Select object sets to measure:SR_IdentifyPrimaryObjects
+
+SaveImages:[module_num:47|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:SR_OrigOverlay
+    Select method for constructing file names:Single name
+    Select image name for file prefix:Twelve
+    Enter single file name:\g<Patient>_\g<Core>_SROverlay
+    Number of digits:4
+    Append a suffix to the image file name?:No
+    Text to append to the image name:
+    Saved file format:jpeg
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/1_images/ImageAfterMath
+    Image bit depth:8-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:Yes
+    Base image folder:Default Output Folder|
+    How to save the series:T (Time)
+    Save with lossless compression?:No
+
+ExportToSpreadsheet:[module_num:48|svn_version:'Unknown'|variable_revision_number:13|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the column delimiter:Comma (",")
+    Add image metadata columns to your object data file?:No
+    Add image file and folder names to your object data file?:No
+    Select the measurements to export:Yes
+    Calculate the per-image mean values for object measurements?:No
+    Calculate the per-image median values for object measurements?:No
+    Calculate the per-image standard deviation values for object measurements?:No
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/4_analysis
+    Create a GenePattern GCT file?:No
+    Select source of sample row name:Metadata
+    Select the image to use as the identifier:None
+    Select the metadata to use as the identifier:None
+    Export all measurement types?:No
+    Press button to select measurements:Cells|Location_CenterMassIntensity_Y_unmix_CERS2,Cells|Location_CenterMassIntensity_Y_unmix_CERS1,Cells|Location_CenterMassIntensity_Y_unmix_CD8,Cells|Location_CenterMassIntensity_Y_unmix_eosin,Cells|Location_CenterMassIntensity_Y_unmix_Smpd1,Cells|Location_CenterMassIntensity_Y_unmix_nuclei,Cells|Location_CenterMassIntensity_Y_unmix_CD68,Cells|Location_CenterMassIntensity_Y_unmix_CK19,Cells|Location_CenterMassIntensity_Y_ImageAfterMath_CD3,Cells|Location_CenterMassIntensity_Y_ImageAfterMath_PHH3,Cells|Location_CenterMassIntensity_Y_ImageAfterMath_CD45,Cells|Location_CenterMassIntensity_Y_ImageAfterMath_CD206,Cells|Location_CenterMassIntensity_X_ImageAfterMath_PHH3,Cells|Location_CenterMassIntensity_X_ImageAfterMath_CD3,Cells|Location_CenterMassIntensity_X_ImageAfterMath_CD206,Cells|Location_CenterMassIntensity_X_ImageAfterMath_CD45,Cells|Location_CenterMassIntensity_X_unmix_CK19,Cells|Location_CenterMassIntensity_X_unmix_CD8,Cells|Location_CenterMassIntensity_X_unmix_eosin,Cells|Location_CenterMassIntensity_X_unmix_CERS1,Cells|Location_CenterMassIntensity_X_unmix_nuclei,Cells|Location_CenterMassIntensity_X_unmix_CD68,Cells|Location_CenterMassIntensity_X_unmix_Smpd1,Cells|Location_CenterMassIntensity_X_unmix_CERS2,Cells|Location_CenterMassIntensity_Z_unmix_nuclei,Cells|Location_CenterMassIntensity_Z_unmix_CERS1,Cells|Location_CenterMassIntensity_Z_unmix_CD8,Cells|Location_CenterMassIntensity_Z_unmix_CK19,Cells|Location_CenterMassIntensity_Z_unmix_Smpd1,Cells|Location_CenterMassIntensity_Z_unmix_eosin,Cells|Location_CenterMassIntensity_Z_unmix_CERS2,Cells|Location_CenterMassIntensity_Z_unmix_CD68,Cells|Location_CenterMassIntensity_Z_ImageAfterMath_CD206,Cells|Location_CenterMassIntensity_Z_ImageAfterMath_CD3,Cells|Location_CenterMassIntensity_Z_ImageAfterMath_PHH3,Cells|Location_CenterMassIntensity_Z_ImageAfterMath_CD45,Cells|Location_MaxIntensity_X_unmix_Smpd1,Cells|Location_MaxIntensity_X_unmix_CERS2,Cells|Location_MaxIntensity_X_unmix_CD8,Cells|Location_MaxIntensity_X_unmix_eosin,Cells|Location_MaxIntensity_X_unmix_CERS1,Cells|Location_MaxIntensity_X_unmix_CK19,Cells|Location_MaxIntensity_X_unmix_CD68,Cells|Location_MaxIntensity_X_unmix_nuclei,Cells|Location_MaxIntensity_X_ImageAfterMath_CD206,Cells|Location_MaxIntensity_X_ImageAfterMath_PHH3,Cells|Location_MaxIntensity_X_ImageAfterMath_CD3,Cells|Location_MaxIntensity_X_ImageAfterMath_CD45,Cells|Location_MaxIntensity_Y_ImageAfterMath_PHH3,Cells|Location_MaxIntensity_Y_ImageAfterMath_CD206,Cells|Location_MaxIntensity_Y_ImageAfterMath_CD45,Cells|Location_MaxIntensity_Y_ImageAfterMath_CD3,Cells|Location_MaxIntensity_Y_unmix_CD68,Cells|Location_MaxIntensity_Y_unmix_eosin,Cells|Location_MaxIntensity_Y_unmix_Smpd1,Cells|Location_MaxIntensity_Y_unmix_CK19,Cells|Location_MaxIntensity_Y_unmix_CD8,Cells|Location_MaxIntensity_Y_unmix_CERS1,Cells|Location_MaxIntensity_Y_unmix_nuclei,Cells|Location_MaxIntensity_Y_unmix_CERS2,Cells|Location_MaxIntensity_Z_ImageAfterMath_CD206,Cells|Location_MaxIntensity_Z_ImageAfterMath_CD3,Cells|Location_MaxIntensity_Z_ImageAfterMath_CD45,Cells|Location_MaxIntensity_Z_ImageAfterMath_PHH3,Cells|Location_MaxIntensity_Z_unmix_CK19,Cells|Location_MaxIntensity_Z_unmix_CD8,Cells|Location_MaxIntensity_Z_unmix_nuclei,Cells|Location_MaxIntensity_Z_unmix_Smpd1,Cells|Location_MaxIntensity_Z_unmix_CERS1,Cells|Location_MaxIntensity_Z_unmix_eosin,Cells|Location_MaxIntensity_Z_unmix_CD68,Cells|Location_MaxIntensity_Z_unmix_CERS2,Cells|Location_Center_X,Cells|Location_Center_Z,Cells|Location_Center_Y,Cells|AreaShape_MedianRadius,Cells|AreaShape_Zernike_3_3,Cells|AreaShape_Zernike_3_1,Cells|AreaShape_Zernike_6_0,Cells|AreaShape_Zernike_6_2,Cells|AreaShape_Zernike_6_6,Cells|AreaShape_Zernike_6_4,Cells|AreaShape_Zernike_5_1,Cells|AreaShape_Zernike_5_3,Cells|AreaShape_Zernike_5_5,Cells|AreaShape_Zernike_8_0,Cells|AreaShape_Zernike_8_8,Cells|AreaShape_Zernike_8_6,Cells|AreaShape_Zernike_8_4,Cells|AreaShape_Zernike_8_2,Cells|AreaShape_Zernike_7_7,Cells|AreaShape_Zernike_7_1,Cells|AreaShape_Zernike_7_3,Cells|AreaShape_Zernike_7_5,Cells|AreaShape_Zernike_9_1,Cells|AreaShape_Zernike_9_3,Cells|AreaShape_Zernike_9_9,Cells|AreaShape_Zernike_9_7,Cells|AreaShape_Zernike_9_5,Cells|AreaShape_Zernike_4_2,Cells|AreaShape_Zernike_4_0,Cells|AreaShape_Zernike_4_4,Cells|AreaShape_Zernike_2_0,Cells|AreaShape_Zernike_2_2,Cells|AreaShape_Zernike_1_1,Cells|AreaShape_Zernike_0_0,Cells|AreaShape_HuMoment_0,Cells|AreaShape_HuMoment_5,Cells|AreaShape_HuMoment_1,Cells|AreaShape_HuMoment_6,Cells|AreaShape_HuMoment_3,Cells|AreaShape_HuMoment_4,Cells|AreaShape_HuMoment_2,Cells|AreaShape_NormalizedMoment_1_3,Cells|AreaShape_NormalizedMoment_1_2,Cells|AreaShape_NormalizedMoment_1_1,Cells|AreaShape_NormalizedMoment_1_0,Cells|AreaShape_NormalizedMoment_2_1,Cells|AreaShape_NormalizedMoment_2_0,Cells|AreaShape_NormalizedMoment_2_3,Cells|AreaShape_NormalizedMoment_2_2,Cells|AreaShape_NormalizedMoment_0_1,Cells|AreaShape_NormalizedMoment_0_3,Cells|AreaShape_NormalizedMoment_0_2,Cells|AreaShape_NormalizedMoment_0_0,Cells|AreaShape_NormalizedMoment_3_1,Cells|AreaShape_NormalizedMoment_3_2,Cells|AreaShape_NormalizedMoment_3_3,Cells|AreaShape_NormalizedMoment_3_0,Cells|AreaShape_MajorAxisLength,Cells|AreaShape_BoundingBoxArea,Cells|AreaShape_SpatialMoment_0_3,Cells|AreaShape_SpatialMoment_0_1,Cells|AreaShape_SpatialMoment_0_0,Cells|AreaShape_SpatialMoment_0_2,Cells|AreaShape_SpatialMoment_2_1,Cells|AreaShape_SpatialMoment_2_0,Cells|AreaShape_SpatialMoment_2_3,Cells|AreaShape_SpatialMoment_2_2,Cells|AreaShape_SpatialMoment_1_0,Cells|AreaShape_SpatialMoment_1_1,Cells|AreaShape_SpatialMoment_1_2,Cells|AreaShape_SpatialMoment_1_3,Cells|AreaShape_BoundingBoxMinimum_Y,Cells|AreaShape_BoundingBoxMinimum_X,Cells|AreaShape_CentralMoment_2_1,Cells|AreaShape_CentralMoment_2_0,Cells|AreaShape_CentralMoment_2_3,Cells|AreaShape_CentralMoment_2_2,Cells|AreaShape_CentralMoment_1_2,Cells|AreaShape_CentralMoment_1_0,Cells|AreaShape_CentralMoment_1_3,Cells|AreaShape_CentralMoment_1_1,Cells|AreaShape_CentralMoment_0_3,Cells|AreaShape_CentralMoment_0_0,Cells|AreaShape_CentralMoment_0_1,Cells|AreaShape_CentralMoment_0_2,Cells|AreaShape_InertiaTensor_0_1,Cells|AreaShape_InertiaTensor_0_0,Cells|AreaShape_InertiaTensor_1_1,Cells|AreaShape_InertiaTensor_1_0,Cells|AreaShape_MeanRadius,Cells|AreaShape_FormFactor,Cells|AreaShape_Solidity,Cells|AreaShape_Center_Y,Cells|AreaShape_Center_X,Cells|AreaShape_EulerNumber,Cells|AreaShape_InertiaTensorEigenvalues_1,Cells|AreaShape_InertiaTensorEigenvalues_0,Cells|AreaShape_EquivalentDiameter,Cells|AreaShape_ConvexArea,Cells|AreaShape_MaxFeretDiameter,Cells|AreaShape_MaximumRadius,Cells|AreaShape_Eccentricity,Cells|AreaShape_Compactness,Cells|AreaShape_Perimeter,Cells|AreaShape_BoundingBoxMaximum_Y,Cells|AreaShape_BoundingBoxMaximum_X,Cells|AreaShape_MinFeretDiameter,Cells|AreaShape_MinorAxisLength,Cells|AreaShape_Orientation,Cells|AreaShape_Extent,Cells|AreaShape_Area,Cells|Intensity_UpperQuartileIntensity_unmix_CK19,Cells|Intensity_UpperQuartileIntensity_unmix_CERS1,Cells|Intensity_UpperQuartileIntensity_unmix_CD68,Cells|Intensity_UpperQuartileIntensity_unmix_CD8,Cells|Intensity_UpperQuartileIntensity_unmix_CERS2,Cells|Intensity_UpperQuartileIntensity_unmix_Smpd1,Cells|Intensity_UpperQuartileIntensity_unmix_eosin,Cells|Intensity_UpperQuartileIntensity_unmix_nuclei,Cells|Intensity_UpperQuartileIntensity_ImageAfterMath_CD3,Cells|Intensity_UpperQuartileIntensity_ImageAfterMath_CD206,Cells|Intensity_UpperQuartileIntensity_ImageAfterMath_PHH3,Cells|Intensity_UpperQuartileIntensity_ImageAfterMath_CD45,Cells|Intensity_MinIntensityEdge_unmix_eosin,Cells|Intensity_MinIntensityEdge_unmix_CK19,Cells|Intensity_MinIntensityEdge_unmix_CERS2,Cells|Intensity_MinIntensityEdge_unmix_nuclei,Cells|Intensity_MinIntensityEdge_unmix_Smpd1,Cells|Intensity_MinIntensityEdge_unmix_CERS1,Cells|Intensity_MinIntensityEdge_unmix_CD68,Cells|Intensity_MinIntensityEdge_unmix_CD8,Cells|Intensity_MinIntensityEdge_ImageAfterMath_PHH3,Cells|Intensity_MinIntensityEdge_ImageAfterMath_CD45,Cells|Intensity_MinIntensityEdge_ImageAfterMath_CD206,Cells|Intensity_MinIntensityEdge_ImageAfterMath_CD3,Cells|Intensity_MedianIntensity_ImageAfterMath_PHH3,Cells|Intensity_MedianIntensity_ImageAfterMath_CD3,Cells|Intensity_MedianIntensity_ImageAfterMath_CD206,Cells|Intensity_MedianIntensity_ImageAfterMath_CD45,Cells|Intensity_MedianIntensity_unmix_eosin,Cells|Intensity_MedianIntensity_unmix_CD8,Cells|Intensity_MedianIntensity_unmix_Smpd1,Cells|Intensity_MedianIntensity_unmix_nuclei,Cells|Intensity_MedianIntensity_unmix_CK19,Cells|Intensity_MedianIntensity_unmix_CERS2,Cells|Intensity_MedianIntensity_unmix_CERS1,Cells|Intensity_MedianIntensity_unmix_CD68,Cells|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD45,Cells|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD3,Cells|Intensity_IntegratedIntensityEdge_ImageAfterMath_PHH3,Cells|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD206,Cells|Intensity_IntegratedIntensityEdge_unmix_CERS1,Cells|Intensity_IntegratedIntensityEdge_unmix_CERS2,Cells|Intensity_IntegratedIntensityEdge_unmix_CK19,Cells|Intensity_IntegratedIntensityEdge_unmix_Smpd1,Cells|Intensity_IntegratedIntensityEdge_unmix_CD68,Cells|Intensity_IntegratedIntensityEdge_unmix_CD8,Cells|Intensity_IntegratedIntensityEdge_unmix_nuclei,Cells|Intensity_IntegratedIntensityEdge_unmix_eosin,Cells|Intensity_IntegratedIntensity_unmix_Smpd1,Cells|Intensity_IntegratedIntensity_unmix_CERS2,Cells|Intensity_IntegratedIntensity_unmix_CD68,Cells|Intensity_IntegratedIntensity_unmix_nuclei,Cells|Intensity_IntegratedIntensity_unmix_CD8,Cells|Intensity_IntegratedIntensity_unmix_eosin,Cells|Intensity_IntegratedIntensity_unmix_CK19,Cells|Intensity_IntegratedIntensity_unmix_CERS1,Cells|Intensity_IntegratedIntensity_ImageAfterMath_CD45,Cells|Intensity_IntegratedIntensity_ImageAfterMath_CD3,Cells|Intensity_IntegratedIntensity_ImageAfterMath_PHH3,Cells|Intensity_IntegratedIntensity_ImageAfterMath_CD206,Cells|Intensity_StdIntensity_ImageAfterMath_PHH3,Cells|Intensity_StdIntensity_ImageAfterMath_CD45,Cells|Intensity_StdIntensity_ImageAfterMath_CD206,Cells|Intensity_StdIntensity_ImageAfterMath_CD3,Cells|Intensity_StdIntensity_unmix_Smpd1,Cells|Intensity_StdIntensity_unmix_nuclei,Cells|Intensity_StdIntensity_unmix_eosin,Cells|Intensity_StdIntensity_unmix_CERS2,Cells|Intensity_StdIntensity_unmix_CD68,Cells|Intensity_StdIntensity_unmix_CK19,Cells|Intensity_StdIntensity_unmix_CERS1,Cells|Intensity_StdIntensity_unmix_CD8,Cells|Intensity_MeanIntensityEdge_unmix_CD68,Cells|Intensity_MeanIntensityEdge_unmix_CD8,Cells|Intensity_MeanIntensityEdge_unmix_CK19,Cells|Intensity_MeanIntensityEdge_unmix_eosin,Cells|Intensity_MeanIntensityEdge_unmix_CERS2,Cells|Intensity_MeanIntensityEdge_unmix_Smpd1,Cells|Intensity_MeanIntensityEdge_unmix_CERS1,Cells|Intensity_MeanIntensityEdge_unmix_nuclei,Cells|Intensity_MeanIntensityEdge_ImageAfterMath_PHH3,Cells|Intensity_MeanIntensityEdge_ImageAfterMath_CD206,Cells|Intensity_MeanIntensityEdge_ImageAfterMath_CD45,Cells|Intensity_MeanIntensityEdge_ImageAfterMath_CD3,Cells|Intensity_MADIntensity_ImageAfterMath_CD45,Cells|Intensity_MADIntensity_ImageAfterMath_PHH3,Cells|Intensity_MADIntensity_ImageAfterMath_CD3,Cells|Intensity_MADIntensity_ImageAfterMath_CD206,Cells|Intensity_MADIntensity_unmix_CD68,Cells|Intensity_MADIntensity_unmix_CD8,Cells|Intensity_MADIntensity_unmix_nuclei,Cells|Intensity_MADIntensity_unmix_CERS1,Cells|Intensity_MADIntensity_unmix_eosin,Cells|Intensity_MADIntensity_unmix_CERS2,Cells|Intensity_MADIntensity_unmix_CK19,Cells|Intensity_MADIntensity_unmix_Smpd1,Cells|Intensity_MaxIntensityEdge_ImageAfterMath_CD3,Cells|Intensity_MaxIntensityEdge_ImageAfterMath_CD45,Cells|Intensity_MaxIntensityEdge_ImageAfterMath_CD206,Cells|Intensity_MaxIntensityEdge_ImageAfterMath_PHH3,Cells|Intensity_MaxIntensityEdge_unmix_CERS1,Cells|Intensity_MaxIntensityEdge_unmix_nuclei,Cells|Intensity_MaxIntensityEdge_unmix_eosin,Cells|Intensity_MaxIntensityEdge_unmix_CK19,Cells|Intensity_MaxIntensityEdge_unmix_CD68,Cells|Intensity_MaxIntensityEdge_unmix_Smpd1,Cells|Intensity_MaxIntensityEdge_unmix_CD8,Cells|Intensity_MaxIntensityEdge_unmix_CERS2,Cells|Intensity_MassDisplacement_unmix_CERS1,Cells|Intensity_MassDisplacement_unmix_CD68,Cells|Intensity_MassDisplacement_unmix_nuclei,Cells|Intensity_MassDisplacement_unmix_eosin,Cells|Intensity_MassDisplacement_unmix_CD8,Cells|Intensity_MassDisplacement_unmix_CERS2,Cells|Intensity_MassDisplacement_unmix_CK19,Cells|Intensity_MassDisplacement_unmix_Smpd1,Cells|Intensity_MassDisplacement_ImageAfterMath_CD3,Cells|Intensity_MassDisplacement_ImageAfterMath_CD45,Cells|Intensity_MassDisplacement_ImageAfterMath_CD206,Cells|Intensity_MassDisplacement_ImageAfterMath_PHH3,Cells|Intensity_MinIntensity_unmix_CERS2,Cells|Intensity_MinIntensity_unmix_eosin,Cells|Intensity_MinIntensity_unmix_CD68,Cells|Intensity_MinIntensity_unmix_CD8,Cells|Intensity_MinIntensity_unmix_CK19,Cells|Intensity_MinIntensity_unmix_nuclei,Cells|Intensity_MinIntensity_unmix_Smpd1,Cells|Intensity_MinIntensity_unmix_CERS1,Cells|Intensity_MinIntensity_ImageAfterMath_CD3,Cells|Intensity_MinIntensity_ImageAfterMath_PHH3,Cells|Intensity_MinIntensity_ImageAfterMath_CD206,Cells|Intensity_MinIntensity_ImageAfterMath_CD45,Cells|Intensity_MaxIntensity_unmix_eosin,Cells|Intensity_MaxIntensity_unmix_CERS2,Cells|Intensity_MaxIntensity_unmix_CERS1,Cells|Intensity_MaxIntensity_unmix_Smpd1,Cells|Intensity_MaxIntensity_unmix_nuclei,Cells|Intensity_MaxIntensity_unmix_CD8,Cells|Intensity_MaxIntensity_unmix_CD68,Cells|Intensity_MaxIntensity_unmix_CK19,Cells|Intensity_MaxIntensity_ImageAfterMath_PHH3,Cells|Intensity_MaxIntensity_ImageAfterMath_CD45,Cells|Intensity_MaxIntensity_ImageAfterMath_CD3,Cells|Intensity_MaxIntensity_ImageAfterMath_CD206,Cells|Intensity_MeanIntensity_ImageAfterMath_CD45,Cells|Intensity_MeanIntensity_ImageAfterMath_CD3,Cells|Intensity_MeanIntensity_ImageAfterMath_PHH3,Cells|Intensity_MeanIntensity_ImageAfterMath_CD206,Cells|Intensity_MeanIntensity_unmix_CK19,Cells|Intensity_MeanIntensity_unmix_eosin,Cells|Intensity_MeanIntensity_unmix_nuclei,Cells|Intensity_MeanIntensity_unmix_CERS1,Cells|Intensity_MeanIntensity_unmix_Smpd1,Cells|Intensity_MeanIntensity_unmix_CERS2,Cells|Intensity_MeanIntensity_unmix_CD8,Cells|Intensity_MeanIntensity_unmix_CD68,Cells|Intensity_LowerQuartileIntensity_unmix_CD68,Cells|Intensity_LowerQuartileIntensity_unmix_CERS1,Cells|Intensity_LowerQuartileIntensity_unmix_nuclei,Cells|Intensity_LowerQuartileIntensity_unmix_CD8,Cells|Intensity_LowerQuartileIntensity_unmix_CERS2,Cells|Intensity_LowerQuartileIntensity_unmix_CK19,Cells|Intensity_LowerQuartileIntensity_unmix_eosin,Cells|Intensity_LowerQuartileIntensity_unmix_Smpd1,Cells|Intensity_LowerQuartileIntensity_ImageAfterMath_PHH3,Cells|Intensity_LowerQuartileIntensity_ImageAfterMath_CD3,Cells|Intensity_LowerQuartileIntensity_ImageAfterMath_CD206,Cells|Intensity_LowerQuartileIntensity_ImageAfterMath_CD45,Cells|Intensity_StdIntensityEdge_unmix_CERS1,Cells|Intensity_StdIntensityEdge_unmix_nuclei,Cells|Intensity_StdIntensityEdge_unmix_CERS2,Cells|Intensity_StdIntensityEdge_unmix_eosin,Cells|Intensity_StdIntensityEdge_unmix_CD68,Cells|Intensity_StdIntensityEdge_unmix_Smpd1,Cells|Intensity_StdIntensityEdge_unmix_CK19,Cells|Intensity_StdIntensityEdge_unmix_CD8,Cells|Intensity_StdIntensityEdge_ImageAfterMath_CD45,Cells|Intensity_StdIntensityEdge_ImageAfterMath_PHH3,Cells|Intensity_StdIntensityEdge_ImageAfterMath_CD206,Cells|Intensity_StdIntensityEdge_ImageAfterMath_CD3,Cells|Parent_NucleiObjects,Cells|Children_Cytoplasm_Count,Cells|Number_Object_Number,NucleiObjects|Intensity_StdIntensity_unmix_CK19,NucleiObjects|Intensity_StdIntensity_unmix_eosin,NucleiObjects|Intensity_StdIntensity_unmix_Smpd1,NucleiObjects|Intensity_StdIntensity_unmix_CERS2,NucleiObjects|Intensity_StdIntensity_unmix_CERS1,NucleiObjects|Intensity_StdIntensity_unmix_nuclei,NucleiObjects|Intensity_StdIntensity_unmix_CD8,NucleiObjects|Intensity_StdIntensity_unmix_CD68,NucleiObjects|Intensity_StdIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_StdIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_StdIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_StdIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MADIntensity_unmix_CERS2,NucleiObjects|Intensity_MADIntensity_unmix_nuclei,NucleiObjects|Intensity_MADIntensity_unmix_Smpd1,NucleiObjects|Intensity_MADIntensity_unmix_CD68,NucleiObjects|Intensity_MADIntensity_unmix_CD8,NucleiObjects|Intensity_MADIntensity_unmix_CERS1,NucleiObjects|Intensity_MADIntensity_unmix_CK19,NucleiObjects|Intensity_MADIntensity_unmix_eosin,NucleiObjects|Intensity_MADIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_MADIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_MADIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MADIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_IntegratedIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_IntegratedIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_IntegratedIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_IntegratedIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_IntegratedIntensity_unmix_CERS2,NucleiObjects|Intensity_IntegratedIntensity_unmix_Smpd1,NucleiObjects|Intensity_IntegratedIntensity_unmix_CD8,NucleiObjects|Intensity_IntegratedIntensity_unmix_CERS1,NucleiObjects|Intensity_IntegratedIntensity_unmix_eosin,NucleiObjects|Intensity_IntegratedIntensity_unmix_CK19,NucleiObjects|Intensity_IntegratedIntensity_unmix_CD68,NucleiObjects|Intensity_IntegratedIntensity_unmix_nuclei,NucleiObjects|Intensity_MaxIntensityEdge_unmix_CERS1,NucleiObjects|Intensity_MaxIntensityEdge_unmix_CERS2,NucleiObjects|Intensity_MaxIntensityEdge_unmix_CD68,NucleiObjects|Intensity_MaxIntensityEdge_unmix_CK19,NucleiObjects|Intensity_MaxIntensityEdge_unmix_nuclei,NucleiObjects|Intensity_MaxIntensityEdge_unmix_Smpd1,NucleiObjects|Intensity_MaxIntensityEdge_unmix_CD8,NucleiObjects|Intensity_MaxIntensityEdge_unmix_eosin,NucleiObjects|Intensity_MaxIntensityEdge_ImageAfterMath_CD3,NucleiObjects|Intensity_MaxIntensityEdge_ImageAfterMath_CD206,NucleiObjects|Intensity_MaxIntensityEdge_ImageAfterMath_PHH3,NucleiObjects|Intensity_MaxIntensityEdge_ImageAfterMath_CD45,NucleiObjects|Intensity_MaxIntensity_unmix_nuclei,NucleiObjects|Intensity_MaxIntensity_unmix_Smpd1,NucleiObjects|Intensity_MaxIntensity_unmix_CERS2,NucleiObjects|Intensity_MaxIntensity_unmix_CD8,NucleiObjects|Intensity_MaxIntensity_unmix_eosin,NucleiObjects|Intensity_MaxIntensity_unmix_CD68,NucleiObjects|Intensity_MaxIntensity_unmix_CK19,NucleiObjects|Intensity_MaxIntensity_unmix_CERS1,NucleiObjects|Intensity_MaxIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_MaxIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_MaxIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_MaxIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MeanIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MeanIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_MeanIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_MeanIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_MeanIntensity_unmix_eosin,NucleiObjects|Intensity_MeanIntensity_unmix_nuclei,NucleiObjects|Intensity_MeanIntensity_unmix_CERS1,NucleiObjects|Intensity_MeanIntensity_unmix_CERS2,NucleiObjects|Intensity_MeanIntensity_unmix_CD8,NucleiObjects|Intensity_MeanIntensity_unmix_CD68,NucleiObjects|Intensity_MeanIntensity_unmix_CK19,NucleiObjects|Intensity_MeanIntensity_unmix_Smpd1,NucleiObjects|Intensity_StdIntensityEdge_unmix_nuclei,NucleiObjects|Intensity_StdIntensityEdge_unmix_CD68,NucleiObjects|Intensity_StdIntensityEdge_unmix_eosin,NucleiObjects|Intensity_StdIntensityEdge_unmix_CD8,NucleiObjects|Intensity_StdIntensityEdge_unmix_Smpd1,NucleiObjects|Intensity_StdIntensityEdge_unmix_CERS2,NucleiObjects|Intensity_StdIntensityEdge_unmix_CK19,NucleiObjects|Intensity_StdIntensityEdge_unmix_CERS1,NucleiObjects|Intensity_StdIntensityEdge_ImageAfterMath_CD206,NucleiObjects|Intensity_StdIntensityEdge_ImageAfterMath_CD3,NucleiObjects|Intensity_StdIntensityEdge_ImageAfterMath_PHH3,NucleiObjects|Intensity_StdIntensityEdge_ImageAfterMath_CD45,NucleiObjects|Intensity_MeanIntensityEdge_unmix_CD8,NucleiObjects|Intensity_MeanIntensityEdge_unmix_CERS2,NucleiObjects|Intensity_MeanIntensityEdge_unmix_CK19,NucleiObjects|Intensity_MeanIntensityEdge_unmix_eosin,NucleiObjects|Intensity_MeanIntensityEdge_unmix_CERS1,NucleiObjects|Intensity_MeanIntensityEdge_unmix_nuclei,NucleiObjects|Intensity_MeanIntensityEdge_unmix_CD68,NucleiObjects|Intensity_MeanIntensityEdge_unmix_Smpd1,NucleiObjects|Intensity_MeanIntensityEdge_ImageAfterMath_CD3,NucleiObjects|Intensity_MeanIntensityEdge_ImageAfterMath_CD45,NucleiObjects|Intensity_MeanIntensityEdge_ImageAfterMath_PHH3,NucleiObjects|Intensity_MeanIntensityEdge_ImageAfterMath_CD206,NucleiObjects|Intensity_LowerQuartileIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_LowerQuartileIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_LowerQuartileIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_LowerQuartileIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_CERS2,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_nuclei,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_CK19,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_eosin,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_CD68,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_CD8,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_CERS1,NucleiObjects|Intensity_LowerQuartileIntensity_unmix_Smpd1,NucleiObjects|Intensity_MedianIntensity_unmix_Smpd1,NucleiObjects|Intensity_MedianIntensity_unmix_CERS2,NucleiObjects|Intensity_MedianIntensity_unmix_CK19,NucleiObjects|Intensity_MedianIntensity_unmix_CD68,NucleiObjects|Intensity_MedianIntensity_unmix_CERS1,NucleiObjects|Intensity_MedianIntensity_unmix_CD8,NucleiObjects|Intensity_MedianIntensity_unmix_nuclei,NucleiObjects|Intensity_MedianIntensity_unmix_eosin,NucleiObjects|Intensity_MedianIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MedianIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_MedianIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_MedianIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_eosin,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_nuclei,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_CK19,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_Smpd1,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_CERS2,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_CD8,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_CD68,NucleiObjects|Intensity_UpperQuartileIntensity_unmix_CERS1,NucleiObjects|Intensity_UpperQuartileIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_UpperQuartileIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_UpperQuartileIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_UpperQuartileIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_MinIntensityEdge_unmix_CERS2,NucleiObjects|Intensity_MinIntensityEdge_unmix_CD8,NucleiObjects|Intensity_MinIntensityEdge_unmix_nuclei,NucleiObjects|Intensity_MinIntensityEdge_unmix_CD68,NucleiObjects|Intensity_MinIntensityEdge_unmix_CERS1,NucleiObjects|Intensity_MinIntensityEdge_unmix_Smpd1,NucleiObjects|Intensity_MinIntensityEdge_unmix_eosin,NucleiObjects|Intensity_MinIntensityEdge_unmix_CK19,NucleiObjects|Intensity_MinIntensityEdge_ImageAfterMath_CD206,NucleiObjects|Intensity_MinIntensityEdge_ImageAfterMath_PHH3,NucleiObjects|Intensity_MinIntensityEdge_ImageAfterMath_CD45,NucleiObjects|Intensity_MinIntensityEdge_ImageAfterMath_CD3,NucleiObjects|Intensity_MinIntensity_ImageAfterMath_CD45,NucleiObjects|Intensity_MinIntensity_ImageAfterMath_PHH3,NucleiObjects|Intensity_MinIntensity_ImageAfterMath_CD206,NucleiObjects|Intensity_MinIntensity_ImageAfterMath_CD3,NucleiObjects|Intensity_MinIntensity_unmix_CD8,NucleiObjects|Intensity_MinIntensity_unmix_CERS1,NucleiObjects|Intensity_MinIntensity_unmix_Smpd1,NucleiObjects|Intensity_MinIntensity_unmix_CD68,NucleiObjects|Intensity_MinIntensity_unmix_nuclei,NucleiObjects|Intensity_MinIntensity_unmix_CERS2,NucleiObjects|Intensity_MinIntensity_unmix_eosin,NucleiObjects|Intensity_MinIntensity_unmix_CK19,NucleiObjects|Intensity_MassDisplacement_unmix_nuclei,NucleiObjects|Intensity_MassDisplacement_unmix_eosin,NucleiObjects|Intensity_MassDisplacement_unmix_CERS1,NucleiObjects|Intensity_MassDisplacement_unmix_CD68,NucleiObjects|Intensity_MassDisplacement_unmix_CERS2,NucleiObjects|Intensity_MassDisplacement_unmix_CD8,NucleiObjects|Intensity_MassDisplacement_unmix_Smpd1,NucleiObjects|Intensity_MassDisplacement_unmix_CK19,NucleiObjects|Intensity_MassDisplacement_ImageAfterMath_CD206,NucleiObjects|Intensity_MassDisplacement_ImageAfterMath_CD45,NucleiObjects|Intensity_MassDisplacement_ImageAfterMath_PHH3,NucleiObjects|Intensity_MassDisplacement_ImageAfterMath_CD3,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_CD8,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_CD68,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_CERS2,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_CERS1,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_Smpd1,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_nuclei,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_CK19,NucleiObjects|Intensity_IntegratedIntensityEdge_unmix_eosin,NucleiObjects|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD206,NucleiObjects|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD45,NucleiObjects|Intensity_IntegratedIntensityEdge_ImageAfterMath_PHH3,NucleiObjects|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD3,NucleiObjects|Location_CenterMassIntensity_X_unmix_CERS1,NucleiObjects|Location_CenterMassIntensity_X_unmix_CK19,NucleiObjects|Location_CenterMassIntensity_X_unmix_nuclei,NucleiObjects|Location_CenterMassIntensity_X_unmix_eosin,NucleiObjects|Location_CenterMassIntensity_X_unmix_CD8,NucleiObjects|Location_CenterMassIntensity_X_unmix_Smpd1,NucleiObjects|Location_CenterMassIntensity_X_unmix_CERS2,NucleiObjects|Location_CenterMassIntensity_X_unmix_CD68,NucleiObjects|Location_CenterMassIntensity_X_ImageAfterMath_CD3,NucleiObjects|Location_CenterMassIntensity_X_ImageAfterMath_CD45,NucleiObjects|Location_CenterMassIntensity_X_ImageAfterMath_CD206,NucleiObjects|Location_CenterMassIntensity_X_ImageAfterMath_PHH3,NucleiObjects|Location_CenterMassIntensity_Z_unmix_CD8,NucleiObjects|Location_CenterMassIntensity_Z_unmix_Smpd1,NucleiObjects|Location_CenterMassIntensity_Z_unmix_CERS2,NucleiObjects|Location_CenterMassIntensity_Z_unmix_CK19,NucleiObjects|Location_CenterMassIntensity_Z_unmix_CERS1,NucleiObjects|Location_CenterMassIntensity_Z_unmix_eosin,NucleiObjects|Location_CenterMassIntensity_Z_unmix_CD68,NucleiObjects|Location_CenterMassIntensity_Z_unmix_nuclei,NucleiObjects|Location_CenterMassIntensity_Z_ImageAfterMath_PHH3,NucleiObjects|Location_CenterMassIntensity_Z_ImageAfterMath_CD45,NucleiObjects|Location_CenterMassIntensity_Z_ImageAfterMath_CD206,NucleiObjects|Location_CenterMassIntensity_Z_ImageAfterMath_CD3,NucleiObjects|Location_CenterMassIntensity_Y_ImageAfterMath_PHH3,NucleiObjects|Location_CenterMassIntensity_Y_ImageAfterMath_CD3,NucleiObjects|Location_CenterMassIntensity_Y_ImageAfterMath_CD206,NucleiObjects|Location_CenterMassIntensity_Y_ImageAfterMath_CD45,NucleiObjects|Location_CenterMassIntensity_Y_unmix_CERS2,NucleiObjects|Location_CenterMassIntensity_Y_unmix_Smpd1,NucleiObjects|Location_CenterMassIntensity_Y_unmix_CK19,NucleiObjects|Location_CenterMassIntensity_Y_unmix_nuclei,NucleiObjects|Location_CenterMassIntensity_Y_unmix_CD8,NucleiObjects|Location_CenterMassIntensity_Y_unmix_CD68,NucleiObjects|Location_CenterMassIntensity_Y_unmix_eosin,NucleiObjects|Location_CenterMassIntensity_Y_unmix_CERS1,NucleiObjects|Location_MaxIntensity_Y_ImageAfterMath_CD206,NucleiObjects|Location_MaxIntensity_Y_ImageAfterMath_PHH3,NucleiObjects|Location_MaxIntensity_Y_ImageAfterMath_CD3,NucleiObjects|Location_MaxIntensity_Y_ImageAfterMath_CD45,NucleiObjects|Location_MaxIntensity_Y_unmix_CERS1,NucleiObjects|Location_MaxIntensity_Y_unmix_CD68,NucleiObjects|Location_MaxIntensity_Y_unmix_CERS2,NucleiObjects|Location_MaxIntensity_Y_unmix_CD8,NucleiObjects|Location_MaxIntensity_Y_unmix_nuclei,NucleiObjects|Location_MaxIntensity_Y_unmix_Smpd1,NucleiObjects|Location_MaxIntensity_Y_unmix_CK19,NucleiObjects|Location_MaxIntensity_Y_unmix_eosin,NucleiObjects|Location_MaxIntensity_Z_unmix_nuclei,NucleiObjects|Location_MaxIntensity_Z_unmix_Smpd1,NucleiObjects|Location_MaxIntensity_Z_unmix_CD8,NucleiObjects|Location_MaxIntensity_Z_unmix_eosin,NucleiObjects|Location_MaxIntensity_Z_unmix_CD68,NucleiObjects|Location_MaxIntensity_Z_unmix_CERS1,NucleiObjects|Location_MaxIntensity_Z_unmix_CERS2,NucleiObjects|Location_MaxIntensity_Z_unmix_CK19,NucleiObjects|Location_MaxIntensity_Z_ImageAfterMath_CD45,NucleiObjects|Location_MaxIntensity_Z_ImageAfterMath_PHH3,NucleiObjects|Location_MaxIntensity_Z_ImageAfterMath_CD3,NucleiObjects|Location_MaxIntensity_Z_ImageAfterMath_CD206,NucleiObjects|Location_MaxIntensity_X_unmix_CD8,NucleiObjects|Location_MaxIntensity_X_unmix_CERS1,NucleiObjects|Location_MaxIntensity_X_unmix_nuclei,NucleiObjects|Location_MaxIntensity_X_unmix_Smpd1,NucleiObjects|Location_MaxIntensity_X_unmix_eosin,NucleiObjects|Location_MaxIntensity_X_unmix_CERS2,NucleiObjects|Location_MaxIntensity_X_unmix_CD68,NucleiObjects|Location_MaxIntensity_X_unmix_CK19,NucleiObjects|Location_MaxIntensity_X_ImageAfterMath_CD206,NucleiObjects|Location_MaxIntensity_X_ImageAfterMath_PHH3,NucleiObjects|Location_MaxIntensity_X_ImageAfterMath_CD45,NucleiObjects|Location_MaxIntensity_X_ImageAfterMath_CD3,NucleiObjects|Location_Center_X,NucleiObjects|Location_Center_Y,NucleiObjects|Location_Center_Z,NucleiObjects|AreaShape_Zernike_9_3,NucleiObjects|AreaShape_Zernike_9_5,NucleiObjects|AreaShape_Zernike_9_7,NucleiObjects|AreaShape_Zernike_9_9,NucleiObjects|AreaShape_Zernike_9_1,NucleiObjects|AreaShape_Zernike_2_0,NucleiObjects|AreaShape_Zernike_2_2,NucleiObjects|AreaShape_Zernike_3_3,NucleiObjects|AreaShape_Zernike_3_1,NucleiObjects|AreaShape_Zernike_8_2,NucleiObjects|AreaShape_Zernike_8_0,NucleiObjects|AreaShape_Zernike_8_8,NucleiObjects|AreaShape_Zernike_8_6,NucleiObjects|AreaShape_Zernike_8_4,NucleiObjects|AreaShape_Zernike_7_7,NucleiObjects|AreaShape_Zernike_7_5,NucleiObjects|AreaShape_Zernike_7_1,NucleiObjects|AreaShape_Zernike_7_3,NucleiObjects|AreaShape_Zernike_6_4,NucleiObjects|AreaShape_Zernike_6_0,NucleiObjects|AreaShape_Zernike_6_6,NucleiObjects|AreaShape_Zernike_6_2,NucleiObjects|AreaShape_Zernike_4_2,NucleiObjects|AreaShape_Zernike_4_0,NucleiObjects|AreaShape_Zernike_4_4,NucleiObjects|AreaShape_Zernike_5_5,NucleiObjects|AreaShape_Zernike_5_3,NucleiObjects|AreaShape_Zernike_5_1,NucleiObjects|AreaShape_Zernike_0_0,NucleiObjects|AreaShape_Zernike_1_1,NucleiObjects|AreaShape_BoundingBoxMaximum_Y,NucleiObjects|AreaShape_BoundingBoxMaximum_X,NucleiObjects|AreaShape_BoundingBoxMinimum_Y,NucleiObjects|AreaShape_BoundingBoxMinimum_X,NucleiObjects|AreaShape_SpatialMoment_2_2,NucleiObjects|AreaShape_SpatialMoment_2_1,NucleiObjects|AreaShape_SpatialMoment_2_0,NucleiObjects|AreaShape_SpatialMoment_2_3,NucleiObjects|AreaShape_SpatialMoment_1_0,NucleiObjects|AreaShape_SpatialMoment_1_1,NucleiObjects|AreaShape_SpatialMoment_1_2,NucleiObjects|AreaShape_SpatialMoment_1_3,NucleiObjects|AreaShape_SpatialMoment_0_1,NucleiObjects|AreaShape_SpatialMoment_0_2,NucleiObjects|AreaShape_SpatialMoment_0_0,NucleiObjects|AreaShape_SpatialMoment_0_3,NucleiObjects|AreaShape_CentralMoment_0_3,NucleiObjects|AreaShape_CentralMoment_0_0,NucleiObjects|AreaShape_CentralMoment_0_1,NucleiObjects|AreaShape_CentralMoment_0_2,NucleiObjects|AreaShape_CentralMoment_2_3,NucleiObjects|AreaShape_CentralMoment_2_1,NucleiObjects|AreaShape_CentralMoment_2_0,NucleiObjects|AreaShape_CentralMoment_2_2,NucleiObjects|AreaShape_CentralMoment_1_3,NucleiObjects|AreaShape_CentralMoment_1_1,NucleiObjects|AreaShape_CentralMoment_1_2,NucleiObjects|AreaShape_CentralMoment_1_0,NucleiObjects|AreaShape_InertiaTensor_0_0,NucleiObjects|AreaShape_InertiaTensor_0_1,NucleiObjects|AreaShape_InertiaTensor_1_1,NucleiObjects|AreaShape_InertiaTensor_1_0,NucleiObjects|AreaShape_EulerNumber,NucleiObjects|AreaShape_Compactness,NucleiObjects|AreaShape_NormalizedMoment_3_3,NucleiObjects|AreaShape_NormalizedMoment_3_0,NucleiObjects|AreaShape_NormalizedMoment_3_1,NucleiObjects|AreaShape_NormalizedMoment_3_2,NucleiObjects|AreaShape_NormalizedMoment_0_1,NucleiObjects|AreaShape_NormalizedMoment_0_0,NucleiObjects|AreaShape_NormalizedMoment_0_3,NucleiObjects|AreaShape_NormalizedMoment_0_2,NucleiObjects|AreaShape_NormalizedMoment_2_3,NucleiObjects|AreaShape_NormalizedMoment_2_1,NucleiObjects|AreaShape_NormalizedMoment_2_2,NucleiObjects|AreaShape_NormalizedMoment_2_0,NucleiObjects|AreaShape_NormalizedMoment_1_3,NucleiObjects|AreaShape_NormalizedMoment_1_2,NucleiObjects|AreaShape_NormalizedMoment_1_1,NucleiObjects|AreaShape_NormalizedMoment_1_0,NucleiObjects|AreaShape_HuMoment_5,NucleiObjects|AreaShape_HuMoment_1,NucleiObjects|AreaShape_HuMoment_6,NucleiObjects|AreaShape_HuMoment_2,NucleiObjects|AreaShape_HuMoment_4,NucleiObjects|AreaShape_HuMoment_0,NucleiObjects|AreaShape_HuMoment_3,NucleiObjects|AreaShape_Center_X,NucleiObjects|AreaShape_Center_Y,NucleiObjects|AreaShape_MaxFeretDiameter,NucleiObjects|AreaShape_InertiaTensorEigenvalues_1,NucleiObjects|AreaShape_InertiaTensorEigenvalues_0,NucleiObjects|AreaShape_MaximumRadius,NucleiObjects|AreaShape_MinorAxisLength,NucleiObjects|AreaShape_MajorAxisLength,NucleiObjects|AreaShape_Area,NucleiObjects|AreaShape_Solidity,NucleiObjects|AreaShape_ConvexArea,NucleiObjects|AreaShape_Extent,NucleiObjects|AreaShape_MedianRadius,NucleiObjects|AreaShape_MinFeretDiameter,NucleiObjects|AreaShape_FormFactor,NucleiObjects|AreaShape_EquivalentDiameter,NucleiObjects|AreaShape_Eccentricity,NucleiObjects|AreaShape_BoundingBoxArea,NucleiObjects|AreaShape_Orientation,NucleiObjects|AreaShape_Perimeter,NucleiObjects|AreaShape_MeanRadius,NucleiObjects|Children_Cells_Count,NucleiObjects|Children_Cytoplasm_Count,NucleiObjects|Number_Object_Number,Image|Intensity_MaxIntensity_SRred2,Image|Intensity_StdIntensity_SRred2,Image|Intensity_TotalIntensity_SRred2,Image|Intensity_MedianIntensity_SRred2,Image|Intensity_PercentMaximal_SRred2,Image|Intensity_UpperQuartileIntensity_SRred2,Image|Intensity_MADIntensity_SRred2,Image|Intensity_MeanIntensity_SRred2,Image|Intensity_MinIntensity_SRred2,Image|Intensity_TotalArea_SRred2,Image|Intensity_LowerQuartileIntensity_SRred2,Image|ModuleError_35Threshold,Image|ModuleError_42MeasureImageIntensity,Image|ModuleError_09IdentifySecondaryObjects,Image|ModuleError_13ConvertObjectsToImage,Image|ModuleError_24UnmixColors,Image|ModuleError_20ImageMath,Image|ModuleError_16UnmixColors,Image|ModuleError_21UnmixColors,Image|ModuleError_04Groups,Image|ModuleError_23UnmixColors,Image|ModuleError_29MeasureObjectIntensity,Image|ModuleError_10ConvertObjectsToImage,Image|ModuleError_38ImageMath,Image|ModuleError_43EnhanceOrSuppressFeatures,Image|ModuleError_41ImageMath,Image|ModuleError_39ColorToGray,Image|ModuleError_05UnmixColors,Image|ModuleError_01Images,Image|ModuleError_14SaveImages,Image|ModuleError_02Metadata,Image|ModuleError_33ImageMath,Image|ModuleError_46MeasureImageAreaOccupied,Image|ModuleError_22ImageMath,Image|ModuleError_30MeasureObjectSizeShape,Image|ModuleError_07ConvertObjectsToImage,Image|ModuleError_17UnmixColors,Image|ModuleError_15UnmixColors,Image|ModuleError_11SaveImages,Image|ModuleError_19UnmixColors,Image|ModuleError_18UnmixColors,Image|ModuleError_06IdentifyPrimaryObjects,Image|ModuleError_27UnmixColors,Image|ModuleError_28ImageMath,Image|ModuleError_03NamesAndTypes,Image|ModuleError_40UnmixColors,Image|ModuleError_37ColorToGray,Image|ModuleError_12IdentifyTertiaryObjects,Image|ModuleError_26ImageMath,Image|ModuleError_36MaskImage,Image|ModuleError_32ImageMath,Image|ModuleError_44IdentifyPrimaryObjects,Image|ModuleError_45OverlayOutlines,Image|ModuleError_31ColorToGray,Image|ModuleError_47SaveImages,Image|ModuleError_25UnmixColors,Image|ModuleError_08SaveImages,Image|ModuleError_34ImageMath,Image|Series_SR,Image|Series_PHH3,Image|Series_CD206,Image|Series_CERS1,Image|Series_CK19,Image|Series_CD8,Image|Series_CD3,Image|Series_HE,Image|Series_CD68,Image|Series_CERS2,Image|Series_CD45,Image|Series_SMPD1,Image|PathName_CK19,Image|PathName_CERS1,Image|PathName_CD206,Image|PathName_SR,Image|PathName_CD8,Image|PathName_CD45,Image|PathName_HE,Image|PathName_CD68,Image|PathName_SMPD1,Image|PathName_CD3,Image|PathName_CERS2,Image|PathName_PHH3,Image|Threshold_OrigThreshold_SR_Threshold,Image|Threshold_OrigThreshold_SR_IdentifyPrimaryObjects,Image|Threshold_OrigThreshold_NucleiObjects,Image|Threshold_OrigThreshold_Cells,Image|Threshold_FinalThreshold_SR_Threshold,Image|Threshold_FinalThreshold_SR_IdentifyPrimaryObjects,Image|Threshold_FinalThreshold_Cells,Image|Threshold_FinalThreshold_NucleiObjects,Image|Threshold_GuideThreshold_NucleiObjects,Image|Threshold_GuideThreshold_Cells,Image|Threshold_SumOfEntropies_NucleiObjects,Image|Threshold_SumOfEntropies_SR_Threshold,Image|Threshold_SumOfEntropies_SR_IdentifyPrimaryObjects,Image|Threshold_SumOfEntropies_Cells,Image|Threshold_WeightedVariance_SR_Threshold,Image|Threshold_WeightedVariance_SR_IdentifyPrimaryObjects,Image|Threshold_WeightedVariance_Cells,Image|Threshold_WeightedVariance_NucleiObjects,Image|ExecutionTime_46MeasureImageAreaOccupied,Image|ExecutionTime_28ImageMath,Image|ExecutionTime_36MaskImage,Image|ExecutionTime_10ConvertObjectsToImage,Image|ExecutionTime_39ColorToGray,Image|ExecutionTime_35Threshold,Image|ExecutionTime_47SaveImages,Image|ExecutionTime_06IdentifyPrimaryObjects,Image|ExecutionTime_03NamesAndTypes,Image|ExecutionTime_23UnmixColors,Image|ExecutionTime_13ConvertObjectsToImage,Image|ExecutionTime_45OverlayOutlines,Image|ExecutionTime_18UnmixColors,Image|ExecutionTime_42MeasureImageIntensity,Image|ExecutionTime_09IdentifySecondaryObjects,Image|ExecutionTime_44IdentifyPrimaryObjects,Image|ExecutionTime_22ImageMath,Image|ExecutionTime_11SaveImages,Image|ExecutionTime_14SaveImages,Image|ExecutionTime_29MeasureObjectIntensity,Image|ExecutionTime_32ImageMath,Image|ExecutionTime_15UnmixColors,Image|ExecutionTime_25UnmixColors,Image|ExecutionTime_04Groups,Image|ExecutionTime_26ImageMath,Image|ExecutionTime_05UnmixColors,Image|ExecutionTime_01Images,Image|ExecutionTime_21UnmixColors,Image|ExecutionTime_16UnmixColors,Image|ExecutionTime_08SaveImages,Image|ExecutionTime_27UnmixColors,Image|ExecutionTime_30MeasureObjectSizeShape,Image|ExecutionTime_02Metadata,Image|ExecutionTime_43EnhanceOrSuppressFeatures,Image|ExecutionTime_41ImageMath,Image|ExecutionTime_12IdentifyTertiaryObjects,Image|ExecutionTime_33ImageMath,Image|ExecutionTime_37ColorToGray,Image|ExecutionTime_40UnmixColors,Image|ExecutionTime_17UnmixColors,Image|ExecutionTime_38ImageMath,Image|ExecutionTime_31ColorToGray,Image|ExecutionTime_34ImageMath,Image|ExecutionTime_20ImageMath,Image|ExecutionTime_24UnmixColors,Image|ExecutionTime_19UnmixColors,Image|ExecutionTime_07ConvertObjectsToImage,Image|Height_CD45,Image|Height_PHH3,Image|Height_CERS1,Image|Height_CD8,Image|Height_CD68,Image|Height_CERS2,Image|Height_CD3,Image|Height_SR,Image|Height_CK19,Image|Height_HE,Image|Height_SMPD1,Image|Height_CD206,Image|URL_PHH3,Image|URL_CD45,Image|URL_CD206,Image|URL_CERS2,Image|URL_SMPD1,Image|URL_SR,Image|URL_CD3,Image|URL_HE,Image|URL_CD68,Image|URL_CERS1,Image|URL_CK19,Image|URL_CD8,Image|FileName_HE,Image|FileName_CD45,Image|FileName_CD68,Image|FileName_SMPD1,Image|FileName_CERS2,Image|FileName_CD206,Image|FileName_CD8,Image|FileName_CD3,Image|FileName_PHH3,Image|FileName_CERS1,Image|FileName_SR,Image|FileName_CK19,Image|Count_Cells,Image|Count_SR_IdentifyPrimaryObjects,Image|Count_NucleiObjects,Image|Count_Cytoplasm,Image|Metadata_FileLocation,Image|Metadata_Patient,Image|Metadata_Core,Image|Metadata_Series,Image|Metadata_ABname,Image|Metadata_AB,Image|Metadata_Frame,Image|Scaling_SR,Image|Scaling_CD68,Image|Scaling_PHH3,Image|Scaling_CERS2,Image|Scaling_CERS1,Image|Scaling_CK19,Image|Scaling_CD8,Image|Scaling_HE,Image|Scaling_CD3,Image|Scaling_CD206,Image|Scaling_CD45,Image|Scaling_SMPD1,Image|Frame_CD45,Image|Frame_HE,Image|Frame_SR,Image|Frame_PHH3,Image|Frame_CD68,Image|Frame_CD8,Image|Frame_CERS2,Image|Frame_CD3,Image|Frame_CK19,Image|Frame_SMPD1,Image|Frame_CERS1,Image|Frame_CD206,Image|MD5Digest_CK19,Image|MD5Digest_CD45,Image|MD5Digest_CD3,Image|MD5Digest_CD206,Image|MD5Digest_CD68,Image|MD5Digest_SMPD1,Image|MD5Digest_CD8,Image|MD5Digest_PHH3,Image|MD5Digest_HE,Image|MD5Digest_CERS2,Image|MD5Digest_SR,Image|MD5Digest_CERS1,Image|Width_CD8,Image|Width_SR,Image|Width_SMPD1,Image|Width_HE,Image|Width_CD45,Image|Width_CERS2,Image|Width_CD206,Image|Width_CD3,Image|Width_PHH3,Image|Width_CD68,Image|Width_CK19,Image|Width_CERS1,Image|AreaOccupied_Perimeter_SR_IdentifyPrimaryObjects,Image|AreaOccupied_TotalArea_SR_IdentifyPrimaryObjects,Image|AreaOccupied_AreaOccupied_SR_IdentifyPrimaryObjects,Image|Group_Index,Image|Group_Number,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_CK19,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_CERS2,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_nuclei,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_Smpd1,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_eosin,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_CERS1,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_CD68,Cytoplasm|Intensity_UpperQuartileIntensity_unmix_CD8,Cytoplasm|Intensity_UpperQuartileIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_UpperQuartileIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_UpperQuartileIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_UpperQuartileIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_StdIntensityEdge_ImageAfterMath_CD3,Cytoplasm|Intensity_StdIntensityEdge_ImageAfterMath_CD206,Cytoplasm|Intensity_StdIntensityEdge_ImageAfterMath_PHH3,Cytoplasm|Intensity_StdIntensityEdge_ImageAfterMath_CD45,Cytoplasm|Intensity_StdIntensityEdge_unmix_Smpd1,Cytoplasm|Intensity_StdIntensityEdge_unmix_CD68,Cytoplasm|Intensity_StdIntensityEdge_unmix_nuclei,Cytoplasm|Intensity_StdIntensityEdge_unmix_eosin,Cytoplasm|Intensity_StdIntensityEdge_unmix_CD8,Cytoplasm|Intensity_StdIntensityEdge_unmix_CERS2,Cytoplasm|Intensity_StdIntensityEdge_unmix_CERS1,Cytoplasm|Intensity_StdIntensityEdge_unmix_CK19,Cytoplasm|Intensity_MeanIntensityEdge_unmix_eosin,Cytoplasm|Intensity_MeanIntensityEdge_unmix_CK19,Cytoplasm|Intensity_MeanIntensityEdge_unmix_CERS1,Cytoplasm|Intensity_MeanIntensityEdge_unmix_CD68,Cytoplasm|Intensity_MeanIntensityEdge_unmix_CERS2,Cytoplasm|Intensity_MeanIntensityEdge_unmix_Smpd1,Cytoplasm|Intensity_MeanIntensityEdge_unmix_CD8,Cytoplasm|Intensity_MeanIntensityEdge_unmix_nuclei,Cytoplasm|Intensity_MeanIntensityEdge_ImageAfterMath_CD206,Cytoplasm|Intensity_MeanIntensityEdge_ImageAfterMath_CD3,Cytoplasm|Intensity_MeanIntensityEdge_ImageAfterMath_PHH3,Cytoplasm|Intensity_MeanIntensityEdge_ImageAfterMath_CD45,Cytoplasm|Intensity_StdIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_StdIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_StdIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_StdIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_StdIntensity_unmix_CD8,Cytoplasm|Intensity_StdIntensity_unmix_CK19,Cytoplasm|Intensity_StdIntensity_unmix_CD68,Cytoplasm|Intensity_StdIntensity_unmix_CERS2,Cytoplasm|Intensity_StdIntensity_unmix_CERS1,Cytoplasm|Intensity_StdIntensity_unmix_Smpd1,Cytoplasm|Intensity_StdIntensity_unmix_eosin,Cytoplasm|Intensity_StdIntensity_unmix_nuclei,Cytoplasm|Intensity_IntegratedIntensity_unmix_CD68,Cytoplasm|Intensity_IntegratedIntensity_unmix_eosin,Cytoplasm|Intensity_IntegratedIntensity_unmix_nuclei,Cytoplasm|Intensity_IntegratedIntensity_unmix_CK19,Cytoplasm|Intensity_IntegratedIntensity_unmix_CD8,Cytoplasm|Intensity_IntegratedIntensity_unmix_Smpd1,Cytoplasm|Intensity_IntegratedIntensity_unmix_CERS2,Cytoplasm|Intensity_IntegratedIntensity_unmix_CERS1,Cytoplasm|Intensity_IntegratedIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_IntegratedIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_IntegratedIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_IntegratedIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_MADIntensity_unmix_CERS2,Cytoplasm|Intensity_MADIntensity_unmix_eosin,Cytoplasm|Intensity_MADIntensity_unmix_CD8,Cytoplasm|Intensity_MADIntensity_unmix_nuclei,Cytoplasm|Intensity_MADIntensity_unmix_CK19,Cytoplasm|Intensity_MADIntensity_unmix_CD68,Cytoplasm|Intensity_MADIntensity_unmix_Smpd1,Cytoplasm|Intensity_MADIntensity_unmix_CERS1,Cytoplasm|Intensity_MADIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_MADIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_MADIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MADIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD206,Cytoplasm|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD3,Cytoplasm|Intensity_IntegratedIntensityEdge_ImageAfterMath_PHH3,Cytoplasm|Intensity_IntegratedIntensityEdge_ImageAfterMath_CD45,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_eosin,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_CD68,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_CERS1,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_CERS2,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_Smpd1,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_CK19,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_CD8,Cytoplasm|Intensity_IntegratedIntensityEdge_unmix_nuclei,Cytoplasm|Intensity_MedianIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_MedianIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MedianIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_MedianIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_MedianIntensity_unmix_Smpd1,Cytoplasm|Intensity_MedianIntensity_unmix_CERS1,Cytoplasm|Intensity_MedianIntensity_unmix_CD8,Cytoplasm|Intensity_MedianIntensity_unmix_eosin,Cytoplasm|Intensity_MedianIntensity_unmix_nuclei,Cytoplasm|Intensity_MedianIntensity_unmix_CERS2,Cytoplasm|Intensity_MedianIntensity_unmix_CK19,Cytoplasm|Intensity_MedianIntensity_unmix_CD68,Cytoplasm|Intensity_MaxIntensityEdge_unmix_CERS2,Cytoplasm|Intensity_MaxIntensityEdge_unmix_CD68,Cytoplasm|Intensity_MaxIntensityEdge_unmix_CERS1,Cytoplasm|Intensity_MaxIntensityEdge_unmix_eosin,Cytoplasm|Intensity_MaxIntensityEdge_unmix_CD8,Cytoplasm|Intensity_MaxIntensityEdge_unmix_Smpd1,Cytoplasm|Intensity_MaxIntensityEdge_unmix_CK19,Cytoplasm|Intensity_MaxIntensityEdge_unmix_nuclei,Cytoplasm|Intensity_MaxIntensityEdge_ImageAfterMath_PHH3,Cytoplasm|Intensity_MaxIntensityEdge_ImageAfterMath_CD3,Cytoplasm|Intensity_MaxIntensityEdge_ImageAfterMath_CD45,Cytoplasm|Intensity_MaxIntensityEdge_ImageAfterMath_CD206,Cytoplasm|Intensity_MaxIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_MaxIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_MaxIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_MaxIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MaxIntensity_unmix_eosin,Cytoplasm|Intensity_MaxIntensity_unmix_CD8,Cytoplasm|Intensity_MaxIntensity_unmix_CK19,Cytoplasm|Intensity_MaxIntensity_unmix_CERS1,Cytoplasm|Intensity_MaxIntensity_unmix_CERS2,Cytoplasm|Intensity_MaxIntensity_unmix_Smpd1,Cytoplasm|Intensity_MaxIntensity_unmix_CD68,Cytoplasm|Intensity_MaxIntensity_unmix_nuclei,Cytoplasm|Intensity_MassDisplacement_ImageAfterMath_CD45,Cytoplasm|Intensity_MassDisplacement_ImageAfterMath_CD3,Cytoplasm|Intensity_MassDisplacement_ImageAfterMath_CD206,Cytoplasm|Intensity_MassDisplacement_ImageAfterMath_PHH3,Cytoplasm|Intensity_MassDisplacement_unmix_CK19,Cytoplasm|Intensity_MassDisplacement_unmix_eosin,Cytoplasm|Intensity_MassDisplacement_unmix_Smpd1,Cytoplasm|Intensity_MassDisplacement_unmix_CD68,Cytoplasm|Intensity_MassDisplacement_unmix_CD8,Cytoplasm|Intensity_MassDisplacement_unmix_nuclei,Cytoplasm|Intensity_MassDisplacement_unmix_CERS1,Cytoplasm|Intensity_MassDisplacement_unmix_CERS2,Cytoplasm|Intensity_MinIntensity_unmix_CD68,Cytoplasm|Intensity_MinIntensity_unmix_CK19,Cytoplasm|Intensity_MinIntensity_unmix_Smpd1,Cytoplasm|Intensity_MinIntensity_unmix_eosin,Cytoplasm|Intensity_MinIntensity_unmix_CD8,Cytoplasm|Intensity_MinIntensity_unmix_CERS1,Cytoplasm|Intensity_MinIntensity_unmix_nuclei,Cytoplasm|Intensity_MinIntensity_unmix_CERS2,Cytoplasm|Intensity_MinIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_MinIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MinIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_MinIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_MinIntensityEdge_unmix_CERS2,Cytoplasm|Intensity_MinIntensityEdge_unmix_CD8,Cytoplasm|Intensity_MinIntensityEdge_unmix_CERS1,Cytoplasm|Intensity_MinIntensityEdge_unmix_nuclei,Cytoplasm|Intensity_MinIntensityEdge_unmix_CD68,Cytoplasm|Intensity_MinIntensityEdge_unmix_eosin,Cytoplasm|Intensity_MinIntensityEdge_unmix_CK19,Cytoplasm|Intensity_MinIntensityEdge_unmix_Smpd1,Cytoplasm|Intensity_MinIntensityEdge_ImageAfterMath_CD3,Cytoplasm|Intensity_MinIntensityEdge_ImageAfterMath_CD45,Cytoplasm|Intensity_MinIntensityEdge_ImageAfterMath_PHH3,Cytoplasm|Intensity_MinIntensityEdge_ImageAfterMath_CD206,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_nuclei,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_CK19,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_CD8,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_eosin,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_CERS2,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_CD68,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_Smpd1,Cytoplasm|Intensity_LowerQuartileIntensity_unmix_CERS1,Cytoplasm|Intensity_LowerQuartileIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_LowerQuartileIntensity_ImageAfterMath_CD45,Cytoplasm|Intensity_LowerQuartileIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_LowerQuartileIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MeanIntensity_unmix_nuclei,Cytoplasm|Intensity_MeanIntensity_unmix_CERS2,Cytoplasm|Intensity_MeanIntensity_unmix_CK19,Cytoplasm|Intensity_MeanIntensity_unmix_eosin,Cytoplasm|Intensity_MeanIntensity_unmix_CERS1,Cytoplasm|Intensity_MeanIntensity_unmix_CD68,Cytoplasm|Intensity_MeanIntensity_unmix_Smpd1,Cytoplasm|Intensity_MeanIntensity_unmix_CD8,Cytoplasm|Intensity_MeanIntensity_ImageAfterMath_CD3,Cytoplasm|Intensity_MeanIntensity_ImageAfterMath_CD206,Cytoplasm|Intensity_MeanIntensity_ImageAfterMath_PHH3,Cytoplasm|Intensity_MeanIntensity_ImageAfterMath_CD45,Cytoplasm|Location_MaxIntensity_Y_ImageAfterMath_CD3,Cytoplasm|Location_MaxIntensity_Y_ImageAfterMath_CD206,Cytoplasm|Location_MaxIntensity_Y_ImageAfterMath_PHH3,Cytoplasm|Location_MaxIntensity_Y_ImageAfterMath_CD45,Cytoplasm|Location_MaxIntensity_Y_unmix_CK19,Cytoplasm|Location_MaxIntensity_Y_unmix_nuclei,Cytoplasm|Location_MaxIntensity_Y_unmix_CERS2,Cytoplasm|Location_MaxIntensity_Y_unmix_CD68,Cytoplasm|Location_MaxIntensity_Y_unmix_Smpd1,Cytoplasm|Location_MaxIntensity_Y_unmix_CD8,Cytoplasm|Location_MaxIntensity_Y_unmix_eosin,Cytoplasm|Location_MaxIntensity_Y_unmix_CERS1,Cytoplasm|Location_MaxIntensity_Z_ImageAfterMath_CD3,Cytoplasm|Location_MaxIntensity_Z_ImageAfterMath_CD206,Cytoplasm|Location_MaxIntensity_Z_ImageAfterMath_PHH3,Cytoplasm|Location_MaxIntensity_Z_ImageAfterMath_CD45,Cytoplasm|Location_MaxIntensity_Z_unmix_Smpd1,Cytoplasm|Location_MaxIntensity_Z_unmix_CK19,Cytoplasm|Location_MaxIntensity_Z_unmix_CERS2,Cytoplasm|Location_MaxIntensity_Z_unmix_CERS1,Cytoplasm|Location_MaxIntensity_Z_unmix_nuclei,Cytoplasm|Location_MaxIntensity_Z_unmix_eosin,Cytoplasm|Location_MaxIntensity_Z_unmix_CD68,Cytoplasm|Location_MaxIntensity_Z_unmix_CD8,Cytoplasm|Location_MaxIntensity_X_unmix_CD8,Cytoplasm|Location_MaxIntensity_X_unmix_eosin,Cytoplasm|Location_MaxIntensity_X_unmix_CD68,Cytoplasm|Location_MaxIntensity_X_unmix_CERS2,Cytoplasm|Location_MaxIntensity_X_unmix_CERS1,Cytoplasm|Location_MaxIntensity_X_unmix_nuclei,Cytoplasm|Location_MaxIntensity_X_unmix_Smpd1,Cytoplasm|Location_MaxIntensity_X_unmix_CK19,Cytoplasm|Location_MaxIntensity_X_ImageAfterMath_CD3,Cytoplasm|Location_MaxIntensity_X_ImageAfterMath_CD45,Cytoplasm|Location_MaxIntensity_X_ImageAfterMath_PHH3,Cytoplasm|Location_MaxIntensity_X_ImageAfterMath_CD206,Cytoplasm|Location_CenterMassIntensity_X_unmix_CD68,Cytoplasm|Location_CenterMassIntensity_X_unmix_Smpd1,Cytoplasm|Location_CenterMassIntensity_X_unmix_CK19,Cytoplasm|Location_CenterMassIntensity_X_unmix_CERS1,Cytoplasm|Location_CenterMassIntensity_X_unmix_nuclei,Cytoplasm|Location_CenterMassIntensity_X_unmix_CERS2,Cytoplasm|Location_CenterMassIntensity_X_unmix_eosin,Cytoplasm|Location_CenterMassIntensity_X_unmix_CD8,Cytoplasm|Location_CenterMassIntensity_X_ImageAfterMath_PHH3,Cytoplasm|Location_CenterMassIntensity_X_ImageAfterMath_CD206,Cytoplasm|Location_CenterMassIntensity_X_ImageAfterMath_CD45,Cytoplasm|Location_CenterMassIntensity_X_ImageAfterMath_CD3,Cytoplasm|Location_CenterMassIntensity_Y_unmix_eosin,Cytoplasm|Location_CenterMassIntensity_Y_unmix_CD68,Cytoplasm|Location_CenterMassIntensity_Y_unmix_CD8,Cytoplasm|Location_CenterMassIntensity_Y_unmix_nuclei,Cytoplasm|Location_CenterMassIntensity_Y_unmix_CK19,Cytoplasm|Location_CenterMassIntensity_Y_unmix_CERS1,Cytoplasm|Location_CenterMassIntensity_Y_unmix_CERS2,Cytoplasm|Location_CenterMassIntensity_Y_unmix_Smpd1,Cytoplasm|Location_CenterMassIntensity_Y_ImageAfterMath_CD45,Cytoplasm|Location_CenterMassIntensity_Y_ImageAfterMath_CD3,Cytoplasm|Location_CenterMassIntensity_Y_ImageAfterMath_CD206,Cytoplasm|Location_CenterMassIntensity_Y_ImageAfterMath_PHH3,Cytoplasm|Location_CenterMassIntensity_Z_unmix_eosin,Cytoplasm|Location_CenterMassIntensity_Z_unmix_CD8,Cytoplasm|Location_CenterMassIntensity_Z_unmix_CD68,Cytoplasm|Location_CenterMassIntensity_Z_unmix_CERS2,Cytoplasm|Location_CenterMassIntensity_Z_unmix_CERS1,Cytoplasm|Location_CenterMassIntensity_Z_unmix_Smpd1,Cytoplasm|Location_CenterMassIntensity_Z_unmix_CK19,Cytoplasm|Location_CenterMassIntensity_Z_unmix_nuclei,Cytoplasm|Location_CenterMassIntensity_Z_ImageAfterMath_PHH3,Cytoplasm|Location_CenterMassIntensity_Z_ImageAfterMath_CD206,Cytoplasm|Location_CenterMassIntensity_Z_ImageAfterMath_CD45,Cytoplasm|Location_CenterMassIntensity_Z_ImageAfterMath_CD3,Cytoplasm|Location_Center_X,Cytoplasm|Location_Center_Y,Cytoplasm|AreaShape_CentralMoment_1_3,Cytoplasm|AreaShape_CentralMoment_1_2,Cytoplasm|AreaShape_CentralMoment_1_0,Cytoplasm|AreaShape_CentralMoment_1_1,Cytoplasm|AreaShape_CentralMoment_2_2,Cytoplasm|AreaShape_CentralMoment_2_1,Cytoplasm|AreaShape_CentralMoment_2_0,Cytoplasm|AreaShape_CentralMoment_2_3,Cytoplasm|AreaShape_CentralMoment_0_1,Cytoplasm|AreaShape_CentralMoment_0_0,Cytoplasm|AreaShape_CentralMoment_0_2,Cytoplasm|AreaShape_CentralMoment_0_3,Cytoplasm|AreaShape_NormalizedMoment_3_0,Cytoplasm|AreaShape_NormalizedMoment_3_1,Cytoplasm|AreaShape_NormalizedMoment_3_3,Cytoplasm|AreaShape_NormalizedMoment_3_2,Cytoplasm|AreaShape_NormalizedMoment_0_1,Cytoplasm|AreaShape_NormalizedMoment_0_0,Cytoplasm|AreaShape_NormalizedMoment_0_2,Cytoplasm|AreaShape_NormalizedMoment_0_3,Cytoplasm|AreaShape_NormalizedMoment_2_0,Cytoplasm|AreaShape_NormalizedMoment_2_3,Cytoplasm|AreaShape_NormalizedMoment_2_1,Cytoplasm|AreaShape_NormalizedMoment_2_2,Cytoplasm|AreaShape_NormalizedMoment_1_1,Cytoplasm|AreaShape_NormalizedMoment_1_2,Cytoplasm|AreaShape_NormalizedMoment_1_0,Cytoplasm|AreaShape_NormalizedMoment_1_3,Cytoplasm|AreaShape_Zernike_7_3,Cytoplasm|AreaShape_Zernike_7_1,Cytoplasm|AreaShape_Zernike_7_5,Cytoplasm|AreaShape_Zernike_7_7,Cytoplasm|AreaShape_Zernike_8_6,Cytoplasm|AreaShape_Zernike_8_2,Cytoplasm|AreaShape_Zernike_8_4,Cytoplasm|AreaShape_Zernike_8_8,Cytoplasm|AreaShape_Zernike_8_0,Cytoplasm|AreaShape_Zernike_5_3,Cytoplasm|AreaShape_Zernike_5_1,Cytoplasm|AreaShape_Zernike_5_5,Cytoplasm|AreaShape_Zernike_1_1,Cytoplasm|AreaShape_Zernike_6_0,Cytoplasm|AreaShape_Zernike_6_6,Cytoplasm|AreaShape_Zernike_6_4,Cytoplasm|AreaShape_Zernike_6_2,Cytoplasm|AreaShape_Zernike_9_5,Cytoplasm|AreaShape_Zernike_9_9,Cytoplasm|AreaShape_Zernike_9_3,Cytoplasm|AreaShape_Zernike_9_7,Cytoplasm|AreaShape_Zernike_9_1,Cytoplasm|AreaShape_Zernike_4_2,Cytoplasm|AreaShape_Zernike_4_0,Cytoplasm|AreaShape_Zernike_4_4,Cytoplasm|AreaShape_Zernike_2_0,Cytoplasm|AreaShape_Zernike_2_2,Cytoplasm|AreaShape_Zernike_3_1,Cytoplasm|AreaShape_Zernike_3_3,Cytoplasm|AreaShape_Zernike_0_0,Cytoplasm|AreaShape_Perimeter,Cytoplasm|AreaShape_Center_X,Cytoplasm|AreaShape_Center_Y,Cytoplasm|AreaShape_InertiaTensor_0_0,Cytoplasm|AreaShape_InertiaTensor_0_1,Cytoplasm|AreaShape_InertiaTensor_1_1,Cytoplasm|AreaShape_InertiaTensor_1_0,Cytoplasm|AreaShape_EulerNumber,Cytoplasm|AreaShape_MajorAxisLength,Cytoplasm|AreaShape_SpatialMoment_2_3,Cytoplasm|AreaShape_SpatialMoment_2_2,Cytoplasm|AreaShape_SpatialMoment_2_1,Cytoplasm|AreaShape_SpatialMoment_2_0,Cytoplasm|AreaShape_SpatialMoment_1_2,Cytoplasm|AreaShape_SpatialMoment_1_0,Cytoplasm|AreaShape_SpatialMoment_1_3,Cytoplasm|AreaShape_SpatialMoment_1_1,Cytoplasm|AreaShape_SpatialMoment_0_2,Cytoplasm|AreaShape_SpatialMoment_0_1,Cytoplasm|AreaShape_SpatialMoment_0_3,Cytoplasm|AreaShape_SpatialMoment_0_0,Cytoplasm|AreaShape_HuMoment_1,Cytoplasm|AreaShape_HuMoment_3,Cytoplasm|AreaShape_HuMoment_0,Cytoplasm|AreaShape_HuMoment_4,Cytoplasm|AreaShape_HuMoment_6,Cytoplasm|AreaShape_HuMoment_2,Cytoplasm|AreaShape_HuMoment_5,Cytoplasm|AreaShape_Extent,Cytoplasm|AreaShape_MaxFeretDiameter,Cytoplasm|AreaShape_BoundingBoxMaximum_Y,Cytoplasm|AreaShape_BoundingBoxMaximum_X,Cytoplasm|AreaShape_Compactness,Cytoplasm|AreaShape_MinFeretDiameter,Cytoplasm|AreaShape_Orientation,Cytoplasm|AreaShape_Eccentricity,Cytoplasm|AreaShape_EquivalentDiameter,Cytoplasm|AreaShape_FormFactor,Cytoplasm|AreaShape_InertiaTensorEigenvalues_1,Cytoplasm|AreaShape_InertiaTensorEigenvalues_0,Cytoplasm|AreaShape_MaximumRadius,Cytoplasm|AreaShape_MinorAxisLength,Cytoplasm|AreaShape_ConvexArea,Cytoplasm|AreaShape_BoundingBoxMinimum_X,Cytoplasm|AreaShape_BoundingBoxMinimum_Y,Cytoplasm|AreaShape_MedianRadius,Cytoplasm|AreaShape_Area,Cytoplasm|AreaShape_BoundingBoxArea,Cytoplasm|AreaShape_Solidity,Cytoplasm|AreaShape_MeanRadius,Cytoplasm|Parent_Cells,Cytoplasm|Parent_NucleiObjects,Cytoplasm|Number_Object_Number,Experiment|Modification_Timestamp,Experiment|CellProfiler_Version,Experiment|Run_Timestamp,Experiment|Pipeline_Pipeline,SR_IdentifyPrimaryObjects|Location_Center_X,SR_IdentifyPrimaryObjects|Location_Center_Z,SR_IdentifyPrimaryObjects|Location_Center_Y,SR_IdentifyPrimaryObjects|Number_Object_Number
+    Representation of Nan/Inf:NaN
+    Add a prefix to file names?:Yes
+    Filename prefix:multiplex
+    Overwrite existing files without warning?:No
+    Data to export:Cells
+    Combine these object measurements with those of the previous object?:No
+    File name:Cells_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+    Data to export:Experiment
+    Combine these object measurements with those of the previous object?:No
+    File name:experiments_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+    Data to export:Object relationships
+    Combine these object measurements with those of the previous object?:No
+    File name:rel_results_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+    Data to export:Cytoplasm
+    Combine these object measurements with those of the previous object?:No
+    File name:Cytoplasm_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+    Data to export:NucleiObjects
+    Combine these object measurements with those of the previous object?:No
+    File name:Nuclei_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+
+ExportToSpreadsheet:[module_num:49|svn_version:'Unknown'|variable_revision_number:13|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the column delimiter:Comma (",")
+    Add image metadata columns to your object data file?:No
+    Add image file and folder names to your object data file?:No
+    Select the measurements to export:Yes
+    Calculate the per-image mean values for object measurements?:Yes
+    Calculate the per-image median values for object measurements?:No
+    Calculate the per-image standard deviation values for object measurements?:Yes
+    Output file location:Elsewhere...|/Volumes/Multiplexing_G_Drive/Multiplexing/multiplexing/TMA_Ahmed_new/Analysis/10_image_cytometry_output/4_analysis/fibrosisImages
+    Create a GenePattern GCT file?:No
+    Select source of sample row name:Metadata
+    Select the image to use as the identifier:None
+    Select the metadata to use as the identifier:None
+    Export all measurement types?:No
+    Press button to select measurements:Image|Intensity_MaxIntensity_SRred2,Image|Intensity_StdIntensity_SRred2,Image|Intensity_TotalIntensity_SRred2,Image|Intensity_MedianIntensity_SRred2,Image|Intensity_PercentMaximal_SRred2,Image|Intensity_UpperQuartileIntensity_SRred2,Image|Intensity_MADIntensity_SRred2,Image|Intensity_MeanIntensity_SRred2,Image|Intensity_MinIntensity_SRred2,Image|Intensity_TotalArea_SRred2,Image|Intensity_LowerQuartileIntensity_SRred2,Image|ModuleError_35Threshold,Image|ModuleError_42MeasureImageIntensity,Image|ModuleError_09IdentifySecondaryObjects,Image|ModuleError_13ConvertObjectsToImage,Image|ModuleError_24UnmixColors,Image|ModuleError_20ImageMath,Image|ModuleError_16UnmixColors,Image|ModuleError_21UnmixColors,Image|ModuleError_04Groups,Image|ModuleError_23UnmixColors,Image|ModuleError_29MeasureObjectIntensity,Image|ModuleError_10ConvertObjectsToImage,Image|ModuleError_38ImageMath,Image|ModuleError_43EnhanceOrSuppressFeatures,Image|ModuleError_41ImageMath,Image|ModuleError_39ColorToGray,Image|ModuleError_05UnmixColors,Image|ModuleError_01Images,Image|ModuleError_14SaveImages,Image|ModuleError_02Metadata,Image|ModuleError_33ImageMath,Image|ModuleError_46MeasureImageAreaOccupied,Image|ModuleError_22ImageMath,Image|ModuleError_30MeasureObjectSizeShape,Image|ModuleError_07ConvertObjectsToImage,Image|ModuleError_17UnmixColors,Image|ModuleError_15UnmixColors,Image|ModuleError_11SaveImages,Image|ModuleError_19UnmixColors,Image|ModuleError_18UnmixColors,Image|ModuleError_06IdentifyPrimaryObjects,Image|ModuleError_27UnmixColors,Image|ModuleError_28ImageMath,Image|ModuleError_03NamesAndTypes,Image|ModuleError_40UnmixColors,Image|ModuleError_37ColorToGray,Image|ModuleError_12IdentifyTertiaryObjects,Image|ModuleError_26ImageMath,Image|ModuleError_36MaskImage,Image|ModuleError_32ImageMath,Image|ModuleError_44IdentifyPrimaryObjects,Image|ModuleError_45OverlayOutlines,Image|ModuleError_31ColorToGray,Image|ModuleError_47SaveImages,Image|ModuleError_25UnmixColors,Image|ModuleError_08SaveImages,Image|ModuleError_34ImageMath,Image|Series_SR,Image|Series_PHH3,Image|Series_CD206,Image|Series_CERS1,Image|Series_CK19,Image|Series_CD8,Image|Series_CD3,Image|Series_HE,Image|Series_CD68,Image|Series_CERS2,Image|Series_CD45,Image|Series_SMPD1,Image|PathName_CK19,Image|PathName_CERS1,Image|PathName_CD206,Image|PathName_SR,Image|PathName_CD8,Image|PathName_CD45,Image|PathName_HE,Image|PathName_CD68,Image|PathName_SMPD1,Image|PathName_CD3,Image|PathName_CERS2,Image|PathName_PHH3,Image|Threshold_OrigThreshold_SR_Threshold,Image|Threshold_OrigThreshold_SR_IdentifyPrimaryObjects,Image|Threshold_OrigThreshold_NucleiObjects,Image|Threshold_OrigThreshold_Cells,Image|Threshold_FinalThreshold_SR_Threshold,Image|Threshold_FinalThreshold_SR_IdentifyPrimaryObjects,Image|Threshold_FinalThreshold_Cells,Image|Threshold_FinalThreshold_NucleiObjects,Image|Threshold_GuideThreshold_NucleiObjects,Image|Threshold_GuideThreshold_Cells,Image|Threshold_SumOfEntropies_NucleiObjects,Image|Threshold_SumOfEntropies_SR_Threshold,Image|Threshold_SumOfEntropies_SR_IdentifyPrimaryObjects,Image|Threshold_SumOfEntropies_Cells,Image|Threshold_WeightedVariance_SR_Threshold,Image|Threshold_WeightedVariance_SR_IdentifyPrimaryObjects,Image|Threshold_WeightedVariance_Cells,Image|Threshold_WeightedVariance_NucleiObjects,Image|ExecutionTime_46MeasureImageAreaOccupied,Image|ExecutionTime_28ImageMath,Image|ExecutionTime_36MaskImage,Image|ExecutionTime_10ConvertObjectsToImage,Image|ExecutionTime_39ColorToGray,Image|ExecutionTime_35Threshold,Image|ExecutionTime_47SaveImages,Image|ExecutionTime_06IdentifyPrimaryObjects,Image|ExecutionTime_03NamesAndTypes,Image|ExecutionTime_23UnmixColors,Image|ExecutionTime_13ConvertObjectsToImage,Image|ExecutionTime_45OverlayOutlines,Image|ExecutionTime_18UnmixColors,Image|ExecutionTime_42MeasureImageIntensity,Image|ExecutionTime_09IdentifySecondaryObjects,Image|ExecutionTime_44IdentifyPrimaryObjects,Image|ExecutionTime_22ImageMath,Image|ExecutionTime_11SaveImages,Image|ExecutionTime_14SaveImages,Image|ExecutionTime_29MeasureObjectIntensity,Image|ExecutionTime_32ImageMath,Image|ExecutionTime_15UnmixColors,Image|ExecutionTime_25UnmixColors,Image|ExecutionTime_04Groups,Image|ExecutionTime_26ImageMath,Image|ExecutionTime_05UnmixColors,Image|ExecutionTime_01Images,Image|ExecutionTime_21UnmixColors,Image|ExecutionTime_16UnmixColors,Image|ExecutionTime_08SaveImages,Image|ExecutionTime_27UnmixColors,Image|ExecutionTime_30MeasureObjectSizeShape,Image|ExecutionTime_02Metadata,Image|ExecutionTime_43EnhanceOrSuppressFeatures,Image|ExecutionTime_41ImageMath,Image|ExecutionTime_12IdentifyTertiaryObjects,Image|ExecutionTime_33ImageMath,Image|ExecutionTime_37ColorToGray,Image|ExecutionTime_40UnmixColors,Image|ExecutionTime_17UnmixColors,Image|ExecutionTime_38ImageMath,Image|ExecutionTime_31ColorToGray,Image|ExecutionTime_34ImageMath,Image|ExecutionTime_20ImageMath,Image|ExecutionTime_24UnmixColors,Image|ExecutionTime_19UnmixColors,Image|ExecutionTime_07ConvertObjectsToImage,Image|Height_CD45,Image|Height_PHH3,Image|Height_CERS1,Image|Height_CD8,Image|Height_CD68,Image|Height_CERS2,Image|Height_CD3,Image|Height_SR,Image|Height_CK19,Image|Height_HE,Image|Height_SMPD1,Image|Height_CD206,Image|URL_PHH3,Image|URL_CD45,Image|URL_CD206,Image|URL_CERS2,Image|URL_SMPD1,Image|URL_SR,Image|URL_CD3,Image|URL_HE,Image|URL_CD68,Image|URL_CERS1,Image|URL_CK19,Image|URL_CD8,Image|FileName_HE,Image|FileName_CD45,Image|FileName_CD68,Image|FileName_SMPD1,Image|FileName_CERS2,Image|FileName_CD206,Image|FileName_CD8,Image|FileName_CD3,Image|FileName_PHH3,Image|FileName_CERS1,Image|FileName_SR,Image|FileName_CK19,Image|Count_Cells,Image|Count_SR_IdentifyPrimaryObjects,Image|Count_NucleiObjects,Image|Count_Cytoplasm,Image|Metadata_FileLocation,Image|Metadata_Patient,Image|Metadata_Core,Image|Metadata_Series,Image|Metadata_ABname,Image|Metadata_AB,Image|Metadata_Frame,Image|Scaling_SR,Image|Scaling_CD68,Image|Scaling_PHH3,Image|Scaling_CERS2,Image|Scaling_CERS1,Image|Scaling_CK19,Image|Scaling_CD8,Image|Scaling_HE,Image|Scaling_CD3,Image|Scaling_CD206,Image|Scaling_CD45,Image|Scaling_SMPD1,Image|Frame_CD45,Image|Frame_HE,Image|Frame_SR,Image|Frame_PHH3,Image|Frame_CD68,Image|Frame_CD8,Image|Frame_CERS2,Image|Frame_CD3,Image|Frame_CK19,Image|Frame_SMPD1,Image|Frame_CERS1,Image|Frame_CD206,Image|MD5Digest_CK19,Image|MD5Digest_CD45,Image|MD5Digest_CD3,Image|MD5Digest_CD206,Image|MD5Digest_CD68,Image|MD5Digest_SMPD1,Image|MD5Digest_CD8,Image|MD5Digest_PHH3,Image|MD5Digest_HE,Image|MD5Digest_CERS2,Image|MD5Digest_SR,Image|MD5Digest_CERS1,Image|Width_CD8,Image|Width_SR,Image|Width_SMPD1,Image|Width_HE,Image|Width_CD45,Image|Width_CERS2,Image|Width_CD206,Image|Width_CD3,Image|Width_PHH3,Image|Width_CD68,Image|Width_CK19,Image|Width_CERS1,Image|AreaOccupied_Perimeter_SR_IdentifyPrimaryObjects,Image|AreaOccupied_TotalArea_SR_IdentifyPrimaryObjects,Image|AreaOccupied_AreaOccupied_SR_IdentifyPrimaryObjects,Image|Group_Index,Image|Group_Number,SR_IdentifyPrimaryObjects|Location_Center_X,SR_IdentifyPrimaryObjects|Location_Center_Z,SR_IdentifyPrimaryObjects|Location_Center_Y,SR_IdentifyPrimaryObjects|Number_Object_Number
+    Representation of Nan/Inf:NaN
+    Add a prefix to file names?:Yes
+    Filename prefix:fibrosis_
+    Overwrite existing files without warning?:Yes
+    Data to export:SR_IdentifyPrimaryObjects
+    Combine these object measurements with those of the previous object?:No
+    File name:\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No
+    Data to export:Image
+    Combine these object measurements with those of the previous object?:No
+    File name:image_\g<Patient>_\g<Core>.csv
+    Use the object name for the file name?:No

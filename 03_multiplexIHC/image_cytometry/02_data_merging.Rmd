@@ -1,0 +1,155 @@
+
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Multiplexing (merge datasets)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r}
+rm(list = ls())
+
+# # load packages ---------------------------------------------------
+scriptLibraries <-  c(
+ "here",
+ "tidyverse"
+)
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+source("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/refs/heads/main/auxillary/basicFunctions.R")
+##---------------------------------------------------------------
+##                        load packages                        --
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+## create results directories
+ifelse(!dir.exists(file.path("./mergedData")),
+       dir.create(file.path("./mergedData")), FALSE)
+```
+
+# merge dataframes
+```{r}
+## cordinate data
+immuneCells <- readRDS("./Flowcytometry_data_results/results/immuneCells/results/cordinateData/cordinateDataCompiled.rds")
+immuneCells <- immuneCells %>%
+  rename(phenotypes_immuneCells = phenotypes)
+
+smpd1Cells <- readRDS("./Flowcytometry_data_results/results/SMPD1/results/cordinateData/cordinateDataCompiled.rds")
+smpd1Cells <- smpd1Cells %>%
+  rename(phenotypes_smpd1Cells = phenotypes)
+
+cers1Cells <- readRDS("./Flowcytometry_data_results/results/CERS1/results/cordinateData/cordinateDataCompiled.rds")
+cers1Cells <- cers1Cells %>%
+  rename(phenotypes_cers1Cells = phenotypes)
+
+cers2Cells <- readRDS("./Flowcytometry_data_results/results/CERS2/results/cordinateData/cordinateDataCompiled.rds")
+cers2Cells <- cers2Cells %>%
+  rename(phenotypes_cers2Cells = phenotypes)
+
+## mergeData
+#put all data frames into list
+df_list <- list(immuneCells, smpd1Cells, cers1Cells, cers2Cells)
+
+names <- colnames(immuneCells)[1:20]
+
+#merge all data frames in list
+mergeData <- df_list %>% reduce(full_join, by=all_of(names))
+
+# mergeData <- mergeData %>%
+#   mutate(cell_id=paste0("c", row_number())) %>%
+#   column_to_rownames("cell_id")
+
+saveRDS(mergeData, "./mergedData/mergedData_with_phenotypes.rds")
+
+## clean dataset
+mergeData$phenotypes_immuneCells <- ifelse(mergeData$phenotypes_immuneCells %in% "CD3(+)", 
+                                           "T_cells", mergeData$phenotypes_immuneCells)
+mergeData$phenotypes_immuneCells <- ifelse(mergeData$phenotypes_immuneCells %in% "CD8(+)", 
+                                            "Cytotoxic_T_cells", mergeData$phenotypes_immuneCells)
+mergeData$phenotypes_immuneCells <- ifelse(mergeData$phenotypes_immuneCells %in% "CD8(-)", 
+                                            "Other_T_cells", mergeData$phenotypes_immuneCells)
+
+mergeData$phenotypes_immuneCells <- ifelse(grepl("Prol_CancerCells_",mergeData$phenotypes_smpd1Cells), 
+                                           "pCancerCells", mergeData$phenotypes_immuneCells)
+mergeData$phenotypes_immuneCells <- ifelse(grepl("\\*", mergeData$phenotypes_cers1Cells), 
+                                           "pCancerCells", mergeData$phenotypes_immuneCells)
+mergeData$phenotypes_immuneCells <- ifelse(grepl("\\*", mergeData$phenotypes_cers2Cells), 
+                                            "pCancerCells", mergeData$phenotypes_immuneCells)
+
+mergeData$phenotypes_immuneCells <- ifelse(grepl("\\*", mergeData$phenotypes_immuneCells), 
+                                           "unassigned", mergeData$phenotypes_immuneCells)
+
+mergeData$phenotypes_smpd1Cells <- ifelse(mergeData$phenotypes_smpd1Cells %in% "CD3(+)", 
+                                           "T_cells", mergeData$phenotypes_smpd1Cells)
+mergeData$phenotypes_smpd1Cells <- ifelse(mergeData$phenotypes_smpd1Cells %in% "CD8(+)", 
+                                           "Cytotoxic_T_cells", mergeData$phenotypes_smpd1Cells)
+mergeData$phenotypes_smpd1Cells <- ifelse(mergeData$phenotypes_smpd1Cells %in% "CD8(-)", 
+                                          "Other_T_cells", mergeData$phenotypes_smpd1Cells)
+mergeData$phenotypes_smpd1Cells <- ifelse(grepl("\\*", mergeData$phenotypes_smpd1Cells), 
+                                           "unassigned", mergeData$phenotypes_smpd1Cells)
+mergeData$phenotypes_smpd1Cells <- ifelse(grepl("_SMPD1", mergeData$phenotypes_smpd1Cells), 
+                                           "SMPD1", NA_character_)
+
+
+mergeData$phenotypes_cers1Cells <- ifelse(mergeData$phenotypes_cers1Cells %in% "CD3(+)", 
+                                            "T_cells", mergeData$phenotypes_cers1Cells)
+mergeData$phenotypes_cers1Cells <- ifelse(mergeData$phenotypes_cers1Cells %in% "CD8(+)", 
+                                           "Cytotoxic_T_cells", mergeData$phenotypes_cers1Cells)
+mergeData$phenotypes_cers1Cells <- ifelse(mergeData$phenotypes_cers1Cells %in% "CD8(-)", 
+                                            "Other_T_cells", mergeData$phenotypes_cers1Cells)
+mergeData$phenotypes_cers1Cells <- ifelse(grepl("\\*", mergeData$phenotypes_cers1Cells), 
+                                           "unassigned", mergeData$phenotypes_cers1Cells)
+mergeData$phenotypes_cers1Cells <- ifelse(grepl("_CERS1", mergeData$phenotypes_cers1Cells), 
+                                           "CERS1", NA_character_)
+
+mergeData$phenotypes_cers2Cells <- ifelse(mergeData$phenotypes_cers2Cells %in% "CD3(+)", 
+                                            "T_cells", mergeData$phenotypes_cers2Cells)
+mergeData$phenotypes_cers2Cells <- ifelse(mergeData$phenotypes_cers2Cells %in% "CD8(+)", 
+                                            "Cytotoxic_T_cells", mergeData$phenotypes_cers2Cells)
+mergeData$phenotypes_cers2Cells <- ifelse(mergeData$phenotypes_cers2Cells %in% "CD8(-)", 
+                                            "Other_T_cells", mergeData$phenotypes_cers2Cells)
+mergeData$phenotypes_cers2Cells <- ifelse(grepl("\\*", mergeData$phenotypes_cers2Cells), 
+                                           "unassigned", mergeData$phenotypes_cers2Cells)
+mergeData$phenotypes_cers2Cells <- ifelse(grepl("_CERS2", mergeData$phenotypes_cers2Cells), 
+                                           "CERS2", NA_character_)
+
+## unite columns
+mergeData <- mergeData %>%
+  unite(phenotypes,
+        phenotypes_immuneCells,
+        phenotypes_smpd1Cells,
+        phenotypes_cers1Cells,
+        phenotypes_cers2Cells,
+        na.rm = TRUE)  %>%
+  dplyr::filter(!phenotypes=="")
+
+## clean compiled phenotypes
+mergeData$phenotypes <- ifelse(grepl("^unassigned", mergeData$phenotypes), "unassigned", mergeData$phenotypes)
+mergeData$phenotypes <- ifelse(grepl(paste("^T_cells", "^T_cells_", sep= "|"), mergeData$phenotypes), "unassigned", mergeData$phenotypes)
+
+## clean for pHH3 cells
+mergeData$phenotypes <- gsub("^pCancerCells", "CancerCells", mergeData$phenotypes)
+
+saveRDS(mergeData, "./mergedData/mergedData_with_phenotypes_cleaned.rds")
+
+as.data.frame(table(mergeData$phenotypes)) %>% 
+  rename(Count=1,Freq=2) %>% 
+  mutate(Perc=100*Freq/sum(Freq))
+```
+
+# computing environment
+```{r warning=FALSE}
+sessionInfo()
+```

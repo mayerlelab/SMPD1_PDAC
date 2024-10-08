@@ -1,0 +1,42 @@
+## if not known replace it with 2G
+memory=32G 
+## always provide first_stain 
+first_stain=R1_HE
+## always provide number of images
+nuImages=12
+## always provide last mask image
+mask=R12_SR
+## name of costain (If not available write NaN)
+costain=R9_CK19
+## name of costain1 (If not available write NaN)
+costain1=R10_CD3
+## name of costain2 (If not available write NaN)
+costain2=R11_CD45
+## stain1 name of costain (If not available write NaN)
+stain1costain=_NaN_
+## stain2 name of costain (If not available write NaN)
+stain2costain=AP
+## stain1 name of costain1 (If not available write NaN)
+stain1costain1=AMEC
+## stain2 name of costain1 (If not available write NaN)
+stain2costain1=AP
+## stain1 name of costain2 (If not available write NaN)
+stain1costain2=AMEC
+## stain2 name of costain2 (If not available write NaN)
+stain2costain2=AP
+## stain1 antibody name of costain (If not available write NaN)
+stain1Namecostain=_NaN_
+## stain2 antibody name of costain (If not available write NaN)
+stain2NaNmecostain=CK19
+## stain1 antibody name of costain1 (If not available write NaN)
+stain1Namecostain2=CD3
+## stain2 antibody name of costain1 (If not available write NaN)
+stain2NaNmecostain2=CK19
+## stain1 antibody name of costain2 (If not available write NaN)
+stain1Namecostain2=CD45
+## stain2 antibody name of costain2 (If not available write NaN)
+stain2NaNmecostain2=CK19
+## Costaining with HE, for no HE staining in Round 1 (If not available write NaN)
+heCostain=_NaN_
+## Provide expected number of pesudocolor
+nuPseudo=13

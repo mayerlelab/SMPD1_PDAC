@@ -1,0 +1,255 @@
+---
+title: "Sphingolipids Prognostic multiplexing: immune cells SMPD1"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook: 
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r warning=FALSE}
+rm(list = ls())
+
+# load packages ---------------------------------------------------
+scriptLibraries <-  c(
+ "here",
+ "plyr",
+ "tidyverse",
+ "RColorBrewer",
+ "sp",
+ "MASS",
+ "nplr",
+ "dbscan",
+ "patchwork",
+ "foreach",
+ "doMC",
+ "ggraph",
+ "igraph",
+ "dendextend"
+)
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+source("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/refs/heads/main/auxillary/basicFunctions.R")
+source("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/refs/heads/main/ML/ImputeTransformScale.R")
+
+##---------------------------------------------------------------
+##                        load packages                        --
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+```
+
+## image cytometry functions
+```{r warning=FALSE}
+source("helper_functions/imageCytometry_absoluteCutoff.R")
+```
+
+## load master table
+```{r warning=FALSE}
+master.table <- read.csv("./metadata/signatureTable_SMPD1.csv")
+## print
+master.table
+```
+
+## facs strategy
+```{r fig.width=10, fig.height=7}
+# create a data frame 
+data <- master.table[,c("appliedGate", "qoi", "createdGate")]
+data$qoi <- paste0(data$appliedGate,data$qoi)
+colnames(data) <- c("level1", "level2", "level3")
+ 
+# transform it to a edge list!
+edges_level1_2 = data %>% 
+  dplyr::select(level1, level2) %>% 
+  unique() %>% 
+  dplyr::rename(from=level1, to=level2)
+
+edges_level2_3 = data %>% 
+  dplyr::select(level2, level3) %>% 
+  unique() %>% 
+  dplyr::rename(from=level2, to=level3)
+
+edge_list=rbind(edges_level1_2, edges_level2_3)
+ 
+# Now we can plot that
+mygraph <- graph_from_data_frame(edge_list)
+p <- ggraph(mygraph, layout = 'dendrogram', circular = FALSE) + 
+  geom_edge_diagonal() +
+  geom_node_label(aes(label=name), 
+                  col = "#E41A1C", nudge_x = 0.2) +
+  geom_node_point(color="#377EB8", size=8) +
+  theme_void() +
+  coord_flip() +
+  scale_y_reverse() 
+
+print(p)
+```
+
+## Parallelization
+```{r}
+numberOfCores <- parallel::detectCores(all.tests = TRUE) - 1
+registerDoMC(numberOfCores)
+## define multicore option
+mcoptions <- list(preschedule=FALSE, set.seed=FALSE)
+```
+
+## image cytometry
+
+```{r warning=FALSE}
+asinh.scale.factor <- 5
+minimum.cells.threshould <- 100 ## number of minimum cells to detect.
+
+files <-
+  list.files(path = "../Data/",
+             pattern = ".csv",
+             full.names = TRUE)
+
+
+## create results directories
+ifelse(!dir.exists(file.path("./results")),
+       dir.create(file.path("./results")), FALSE)
+
+## subdirectories
+results_subdirectories <- c("./results/facsPlots",
+                            "./results/summaryStats",
+                            "./results/cordinateData")
+for (sub in results_subdirectories) {
+  ifelse(!dir.exists(file.path(sub)),
+         dir.create(file.path(sub)), FALSE)
+}
+
+## define datalist
+# summary.stat <- list()
+# cordinate.stat <- list()
+
+foreach(f = files,
+        .options.multicore = mcoptions,
+        .packages = scriptLibraries) %dopar% {
+          ## read facs data files
+          facs.dat <- read.csv(f)
+          
+          ## identify filenames
+          
+          filenames <- sub(".*/", "", f)
+          filenames <- gsub("multiplexCells_", "", filenames)
+          filenames <- gsub(".csv", "", filenames)
+          
+          # banner(filenames)
+          
+          if ((dim(facs.dat)[1] < minimum.cells.threshould) == FALSE) {
+            ## define rownames
+            rownames(facs.dat) <- paste0("cell", rownames(facs.dat))
+            
+            ## subset data
+            dnames <-
+              c("ImageNumber", "Location_Center_X", "Location_Center_Y")
+            cnames <-
+              c("Compactness", "AreaShape_Area", "MeanIntensity_")
+            
+            facs.dat <-
+              facs.dat[, grepl(paste(c(cnames, dnames), collapse = "|"),
+                               colnames(facs.dat))]
+            
+            ## tidy data
+            colnames(facs.dat) <-
+              sub(".*\\_", "", colnames(facs.dat))
+            colnames(facs.dat) <- toupper(colnames(facs.dat))
+            
+            ## normalize data
+            
+            facs.dat <- ImputeTransformScale(facs.dat,
+                                             Scaling = TRUE,
+                                             ScaleType = "Auto",
+                                             drop.variables = toupper(c("ImageNumber", "X", "Y")))
+
+            for (i in colnames(facs.dat)) {
+              if (i %in% toupper(c("ImageNumber", "X", "Y")) == FALSE) {
+                facs.dat[[i]] <- asinh(facs.dat[[i]] / asinh.scale.factor)
+              }
+            }
+            ## perform image cytometry
+            results <- imageCytometry_abosoluteCutoff(data = facs.dat,
+                                      master.table = master.table)
+            
+            ## save_plot
+            ggsave(
+              filename = paste0("./results/facsPlots/", filenames, ".pdf"),
+              plot = results$plot,
+              device = cairo_pdf,
+              width = 297,
+              height = 210,
+              units = "mm"
+            )
+            
+            ## save summary stats
+            # summary.stat[[filenames]] <- results$summary.results
+            saveRDS(results$summary.results,
+                    paste0("./results/summaryStats/", filenames, ".rds"))
+            
+            ## save cordiante stats
+            
+            # cordinate.stat[[filenames]] <- results$cordinate.data
+            saveRDS(results$cordinate.data,
+                    paste0("./results/cordinateData/", filenames, ".rds"))
+          }
+          
+}
+
+## compile and save results
+
+summary.stat.lists <- list.files(path = "./results/summaryStats", 
+                                     pattern="*.rds", 
+                                     full.names = TRUE)
+summary.stat <- lapply(summary.stat.lists, readRDS)
+names(summary.stat) <- tools::file_path_sans_ext(basename(summary.stat.lists))
+for (i in names(summary.stat)) {
+  colnames(summary.stat[[i]]) <- c("Parameters", i)
+}
+saveRDS(summary.stat, "./results/summaryStats/summaryStats.rds")
+
+## delete raw data
+do.call(file.remove,list(summary.stat.lists))
+
+## save compiled results
+# summary.stat.compiled <-
+#   Reduce(function(...)
+#     merge(..., by = c("Parameters"), all = TRUE), summary.stat)
+# saveRDS(summary.stat.compiled,
+#         "./results/summaryStats/summaryStatsCompiled.rds")
+
+## save co-ordinate results
+cordinate.stat.lists <- list.files(path = "./results/cordinateData", 
+                                     pattern="*.rds", 
+                                     full.names = TRUE)
+cordinate.stat <- lapply(cordinate.stat.lists, readRDS)
+names(cordinate.stat) <- tools::file_path_sans_ext(basename(cordinate.stat.lists))
+saveRDS(cordinate.stat, "./results/cordinateData/cordinateData.rds")
+
+## delete raw data
+do.call(file.remove,list(cordinate.stat.lists))
+
+## save compiled results
+cordinate.stat.compiled <- data.table::rbindlist(cordinate.stat, idcol=TRUE)
+cordinate.stat.compiled <- cordinate.stat.compiled %>%
+  separate(col=.id, into = c("Patient","Core"), sep = "_", remove = FALSE)
+
+saveRDS(cordinate.stat.compiled,
+        "./results/cordinateData/cordinateDataCompiled.rds")
+```
+
+# computing environment
+
+```{r warning=FALSE}
+sessionInfo()
+```

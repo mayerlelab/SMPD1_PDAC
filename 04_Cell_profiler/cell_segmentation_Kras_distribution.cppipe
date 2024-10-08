@@ -1,0 +1,372 @@
+CellProfiler Pipeline: http://www.cellprofiler.org
+Version:5
+DateRevision:426
+GitHash:
+ModuleCount:22
+HasImagePlaneDetails:False
+
+Images:[module_num:1|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:['To begin creating your project, use the Images module to compile a list of files and/or folders that you want to analyze. You can also specify a set of rules to include only the desired files in your selected folders.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    :
+    Filter images?:Images only
+    Select the rule criteria:and (extension does isimage) (directory doesnot containregexp "[\\\\\\\\/]\\\\.")
+
+Metadata:[module_num:2|svn_version:'Unknown'|variable_revision_number:6|show_window:False|notes:['The Metadata module optionally allows you to extract information describing your images (i.e, metadata) which will be stored along with your measurements. This information can be contained in the file name and/or location, or in an external file.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Extract metadata?:Yes
+    Metadata data type:Text
+    Metadata types:{}
+    Extraction method count:1
+    Metadata extraction method:Extract from file/folder names
+    Metadata source:File name
+    Regular expression to extract from file name:^(?P<Clone>[A-Za-z0-9]+)_(?P<Cell_Nr>[0-9]+)\.tif$
+    Regular expression to extract from folder name:(?P<Date>[0-9]{4}_[0-9]{2}_[0-9]{2})$
+    Extract metadata from:All images
+    Select the filtering criteria:and (file does contain "")
+    Metadata file location:Elsewhere...|
+    Match file and image metadata:[]
+    Use case insensitive matching?:No
+    Metadata file name:
+    Does cached metadata exist?:No
+
+NamesAndTypes:[module_num:3|svn_version:'Unknown'|variable_revision_number:8|show_window:False|notes:['The NamesAndTypes module allows you to assign a meaningful name to each image by which other modules will refer to it.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Assign a name to:All images
+    Select the image type:Color image
+    Name to assign these images:raw_image
+    Match metadata:[]
+    Image set matching method:Order
+    Set intensity range from:Image metadata
+    Assignments count:3
+    Single images count:0
+    Maximum intensity:255.0
+    Process as 3D?:No
+    Relative pixel spacing in X:1.0
+    Relative pixel spacing in Y:1.0
+    Relative pixel spacing in Z:1.0
+    Select the rule criteria:and (file does contain "c3")
+    Name to assign these images:DAPI
+    Name to assign these objects:Cell
+    Select the image type:Grayscale image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "c1")
+    Name to assign these images:PI
+    Name to assign these objects:Nucleus
+    Select the image type:Grayscale image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+    Select the rule criteria:and (file does contain "c2")
+    Name to assign these images:F_Actin
+    Name to assign these objects:Cytoplasm
+    Select the image type:Grayscale image
+    Set intensity range from:Image metadata
+    Maximum intensity:255.0
+
+Groups:[module_num:4|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:['The Groups module optionally allows you to split your list of images into image subsets (groups) which will be processed independently of each other. Examples of groupings include screening batches, microtiter plates, time-lapse movies, etc.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Do you want to group your images?:No
+    grouping metadata count:1
+    Metadata category:None
+
+ColorToGray:[module_num:5|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:raw_image
+    Conversion method:Split
+    Image type:Channels
+    Name the output image:OrigGray
+    Relative weight of the red channel:1.0
+    Relative weight of the green channel:1.0
+    Relative weight of the blue channel:1.0
+    Convert red to gray?:Yes
+    Name the output image:OrigRed
+    Convert green to gray?:Yes
+    Name the output image:OrigGreen
+    Convert blue to gray?:Yes
+    Name the output image:OrigBlue
+    Convert hue to gray?:Yes
+    Name the output image:OrigHue
+    Convert saturation to gray?:Yes
+    Name the output image:OrigSaturation
+    Convert value to gray?:Yes
+    Name the output image:OrigValue
+    Channel count:2
+    Channel number:1
+    Relative weight of the channel:1.0
+    Image name:Kras
+    Channel number:2
+    Relative weight of the channel:1.0
+    Image name:DAPI
+
+IdentifyPrimaryObjects:[module_num:6|svn_version:'Unknown'|variable_revision_number:15|show_window:False|notes:['Identify the nuclei from the nuclear stain image. ']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:DAPI
+    Name the primary objects to be identified:Nuclei
+    Typical diameter of objects, in pixel units (Min,Max):50,300
+    Discard objects outside the diameter range?:Yes
+    Discard objects touching the border of the image?:Yes
+    Method to distinguish clumped objects:Shape
+    Method to draw dividing lines between clumped objects:Shape
+    Size of smoothing filter:10
+    Suppress local maxima that are closer than this minimum allowed distance:7.0
+    Speed up by using lower-resolution image to find local maxima?:Yes
+    Fill holes in identified objects?:After both thresholding and declumping
+    Automatically calculate size of smoothing filter for declumping?:Yes
+    Automatically calculate minimum allowed distance between local maxima?:Yes
+    Handling of objects if excessive number of objects identified:Continue
+    Maximum number of objects:500
+    Use advanced settings?:Yes
+    Threshold setting version:12
+    Threshold strategy:Global
+    Thresholding method:Minimum Cross-Entropy
+    Threshold smoothing scale:1.0
+    Threshold correction factor:1.1
+    Lower and upper bounds on threshold:0.0,1.0
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Two classes
+    Log transform before thresholding?:No
+    Assign pixels in the middle intensity class to the foreground or the background?:Foreground
+    Size of adaptive window:50
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Mean
+    Variance method:Standard deviation
+    # of deviations:2.0
+    Thresholding method:Otsu
+
+ExpandOrShrinkObjects:[module_num:7|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:Nuclei
+    Name the output objects:ExpandNuclei
+    Select the operation:Expand objects by a specified number of pixels
+    Number of pixels by which to expand or shrink:15
+    Fill holes in objects so that all objects shrink to a single point?:No
+    Expand or shrink measurement:None
+
+IdentifyTertiaryObjects:[module_num:8|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the larger identified objects:ExpandNuclei
+    Select the smaller identified objects:Nuclei
+    Name the tertiary objects to be identified:PerinuclearArea
+    Shrink smaller object prior to subtraction?:No
+
+IdentifyPrimaryObjects:[module_num:9|svn_version:'Unknown'|variable_revision_number:15|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input image:Kras
+    Name the primary objects to be identified:PrimaryCells
+    Typical diameter of objects, in pixel units (Min,Max):70,400
+    Discard objects outside the diameter range?:No
+    Discard objects touching the border of the image?:No
+    Method to distinguish clumped objects:Intensity
+    Method to draw dividing lines between clumped objects:Intensity
+    Size of smoothing filter:10
+    Suppress local maxima that are closer than this minimum allowed distance:7.0
+    Speed up by using lower-resolution image to find local maxima?:Yes
+    Fill holes in identified objects?:After both thresholding and declumping
+    Automatically calculate size of smoothing filter for declumping?:Yes
+    Automatically calculate minimum allowed distance between local maxima?:Yes
+    Handling of objects if excessive number of objects identified:Continue
+    Maximum number of objects:500
+    Use advanced settings?:Yes
+    Threshold setting version:12
+    Threshold strategy:Global
+    Thresholding method:Minimum Cross-Entropy
+    Threshold smoothing scale:1.3488
+    Threshold correction factor:1.0
+    Lower and upper bounds on threshold:0.0,1.0
+    Manual threshold:0.0
+    Select the measurement to threshold with:None
+    Two-class or three-class thresholding?:Two classes
+    Log transform before thresholding?:No
+    Assign pixels in the middle intensity class to the foreground or the background?:Foreground
+    Size of adaptive window:50
+    Lower outlier fraction:0.05
+    Upper outlier fraction:0.05
+    Averaging method:Mean
+    Variance method:Standard deviation
+    # of deviations:2.0
+    Thresholding method:Minimum Cross-Entropy
+
+RelateObjects:[module_num:10|svn_version:'Unknown'|variable_revision_number:5|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Parent objects:ExpandNuclei
+    Child objects:PrimaryCells
+    Calculate child-parent distances?:None
+    Calculate per-parent means for all child measurements?:Yes
+    Calculate distances to other parents?:No
+    Do you want to save the children with parents as a new object set?:Yes
+    Name the output object:Cells
+    Parent name:None
+
+IdentifyTertiaryObjects:[module_num:11|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the larger identified objects:Cells
+    Select the smaller identified objects:Nuclei
+    Name the tertiary objects to be identified:WholeCytoplasm
+    Shrink smaller object prior to subtraction?:Yes
+
+ExpandOrShrinkObjects:[module_num:12|svn_version:'Unknown'|variable_revision_number:2|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the input objects:Cells
+    Name the output objects:ShrunkenCell
+    Select the operation:Shrink objects by a specified number of pixels
+    Number of pixels by which to expand or shrink:5
+    Fill holes in objects so that all objects shrink to a single point?:No
+    Expand or shrink measurement:None
+
+IdentifyTertiaryObjects:[module_num:13|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the larger identified objects:Cells
+    Select the smaller identified objects:ShrunkenCell
+    Name the tertiary objects to be identified:CellmembraneArea
+    Shrink smaller object prior to subtraction?:Yes
+
+IdentifyTertiaryObjects:[module_num:14|svn_version:'Unknown'|variable_revision_number:3|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the larger identified objects:ShrunkenCell
+    Select the smaller identified objects:ExpandNuclei
+    Name the tertiary objects to be identified:CytoplasmArea
+    Shrink smaller object prior to subtraction?:Yes
+
+MeasureObjectIntensity:[module_num:15|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select images to measure:Kras
+    Select objects to measure:CellmembraneArea, Cells, CytoplasmArea, Nuclei, PerinuclearArea
+
+MeasureObjectIntensityDistribution:[module_num:16|svn_version:'Unknown'|variable_revision_number:6|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select images to measure:Kras
+    Hidden:1
+    Hidden:1
+    Hidden:1
+    Calculate intensity Zernikes?:Magnitudes and phase
+    Maximum zernike moment:5
+    Select objects to measure:Cells
+    Object to use as center?:Edges of other objects
+    Select objects to use as centers:Nuclei
+    Scale the bins?:Yes
+    Number of bins:5
+    Maximum radius:100
+    Image:None
+    Objects to display:Do not use
+    Number of bins:4
+    Measurement:Fraction at Distance
+    Color map:Blues
+    Save display as image?:Yes
+    Output image name:HeatmapFractionAtDistance
+
+SaveImages:[module_num:17|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:HeatmapFractionAtDistance
+    Select method for constructing file names:From image filename
+    Select image name for file prefix:raw_image
+    Enter single file name:OrigBlue
+    Number of digits:4
+    Append a suffix to the image file name?:Yes
+    Text to append to the image name:HeatmapFractionAtDistance
+    Saved file format:tiff
+    Output file location:Default Output Folder|
+    Image bit depth:8-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:No
+    Base image folder:Elsewhere...|
+    How to save the series:T (Time)
+    Save with lossless compression?:Yes
+
+GrayToColor:[module_num:18|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select a color scheme:RGB
+    Rescale intensity:Yes
+    Select the image to be colored red:Kras
+    Select the image to be colored green:DAPI
+    Select the image to be colored blue:DAPI
+    Name the output image:rawRGB
+    Relative weight for the red image:1.0
+    Relative weight for the green image:1.0
+    Relative weight for the blue image:1.0
+    Select the image to be colored cyan:Leave this black
+    Select the image to be colored magenta:Leave this black
+    Select the image to be colored yellow:Leave this black
+    Select the image that determines brightness:Leave this black
+    Relative weight for the cyan image:1.0
+    Relative weight for the magenta image:1.0
+    Relative weight for the yellow image:1.0
+    Relative weight for the brightness image:1.0
+    Hidden:1
+    Image name:None
+    Color:#ff0000
+    Weight:1.0
+
+OverlayOutlines:[module_num:19|svn_version:'Unknown'|variable_revision_number:4|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Display outlines on a blank image?:No
+    Select image on which to display outlines:rawRGB
+    Name the output image:rawOverlay
+    Outline display mode:Color
+    Select method to determine brightness of outlines:Max of image
+    How to outline:Inner
+    Select outline color:yellow
+    Select objects to display:PerinuclearArea
+    Select outline color:#FF8040
+    Select objects to display:CellmembraneArea
+
+DisplayDataOnImage:[module_num:20|svn_version:'Unknown'|variable_revision_number:6|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Display object or image measurements?:Object
+    Select the input objects:Cells
+    Measurement to display:Number_Object_Number
+    Select the image on which to display the measurements:rawOverlay
+    Text color:white
+    Name the output image that has the measurements displayed:CellNumber
+    Font size (points):15
+    Number of decimals:0
+    Image elements to save:Image
+    Annotation offset (in pixels):0
+    Display mode:Text
+    Color map:Default
+    Display background image?:Yes
+    Color map scale:Use this image's measurement range
+    Color map range:0.0,1.0
+    Font:.Aqua Kana
+    Use scientific notation?:No
+    Font weight:normal
+
+SaveImages:[module_num:21|svn_version:'Unknown'|variable_revision_number:16|show_window:False|notes:[]|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the type of image to save:Image
+    Select the image to save:CellNumber
+    Select method for constructing file names:From image filename
+    Select image name for file prefix:raw_image
+    Enter single file name:OrigBlue
+    Number of digits:4
+    Append a suffix to the image file name?:Yes
+    Text to append to the image name:_CellNumber
+    Saved file format:tiff
+    Output file location:Default Output Folder|
+    Image bit depth:8-bit integer
+    Overwrite existing files without warning?:No
+    When to save:Every cycle
+    Record the file and path information to the saved image?:No
+    Create subfolders in the output folder?:No
+    Base image folder:Elsewhere...|
+    How to save the series:T (Time)
+    Save with lossless compression?:Yes
+
+ExportToSpreadsheet:[module_num:22|svn_version:'Unknown'|variable_revision_number:13|show_window:False|notes:['Export any measurements to a comma-delimited file (.csv). The measurements made for the nuclei and foci objects will be saved to separate .csv files, in addition to the per-image .csv.']|batch_state:array([], dtype=uint8)|enabled:True|wants_pause:False]
+    Select the column delimiter:Comma (",")
+    Add image metadata columns to your object data file?:Yes
+    Add image file and folder names to your object data file?:Yes
+    Select the measurements to export:Yes
+    Calculate the per-image mean values for object measurements?:No
+    Calculate the per-image median values for object measurements?:No
+    Calculate the per-image standard deviation values for object measurements?:No
+    Output file location:Default Output Folder|
+    Create a GenePattern GCT file?:No
+    Select source of sample row name:Metadata
+    Select the image to use as the identifier:None
+    Select the metadata to use as the identifier:None
+    Export all measurement types?:Yes
+    Press button to select measurements:Nuclei|Location_MaxIntensity_Z_Kras,Nuclei|Location_MaxIntensity_X_Kras,Nuclei|Location_MaxIntensity_Y_Kras,Nuclei|Location_CenterMassIntensity_Z_Kras,Nuclei|Location_CenterMassIntensity_Y_Kras,Nuclei|Location_CenterMassIntensity_X_Kras,Nuclei|Location_Center_X,Nuclei|Location_Center_Z,Nuclei|Location_Center_Y,Nuclei|Intensity_StdIntensity_Kras,Nuclei|Intensity_UpperQuartileIntensity_Kras,Nuclei|Intensity_LowerQuartileIntensity_Kras,Nuclei|Intensity_MADIntensity_Kras,Nuclei|Intensity_StdIntensityEdge_Kras,Nuclei|Intensity_MeanIntensity_Kras,Nuclei|Intensity_MaxIntensity_Kras,Nuclei|Intensity_MeanIntensityEdge_Kras,Nuclei|Intensity_MaxIntensityEdge_Kras,Nuclei|Intensity_IntegratedIntensityEdge_Kras,Nuclei|Intensity_MinIntensity_Kras,Nuclei|Intensity_MedianIntensity_Kras,Nuclei|Intensity_IntegratedIntensity_Kras,Nuclei|Intensity_MinIntensityEdge_Kras,Nuclei|Intensity_MassDisplacement_Kras,Nuclei|Number_Object_Number,Nuclei|Children_WholeCytoplasm_Count,Nuclei|Children_PerinuclearArea_Count,Cells|RadialDistribution_ZernikeMagnitude_Kras_3_1,Cells|RadialDistribution_ZernikeMagnitude_Kras_3_3,Cells|RadialDistribution_ZernikeMagnitude_Kras_1_1,Cells|RadialDistribution_ZernikeMagnitude_Kras_4_2,Cells|RadialDistribution_ZernikeMagnitude_Kras_4_4,Cells|RadialDistribution_ZernikeMagnitude_Kras_4_0,Cells|RadialDistribution_ZernikeMagnitude_Kras_0_0,Cells|RadialDistribution_ZernikeMagnitude_Kras_5_1,Cells|RadialDistribution_ZernikeMagnitude_Kras_5_5,Cells|RadialDistribution_ZernikeMagnitude_Kras_5_3,Cells|RadialDistribution_ZernikeMagnitude_Kras_2_2,Cells|RadialDistribution_ZernikeMagnitude_Kras_2_0,Cells|RadialDistribution_ZernikePhase_Kras_4_2,Cells|RadialDistribution_ZernikePhase_Kras_4_0,Cells|RadialDistribution_ZernikePhase_Kras_4_4,Cells|RadialDistribution_ZernikePhase_Kras_3_1,Cells|RadialDistribution_ZernikePhase_Kras_3_3,Cells|RadialDistribution_ZernikePhase_Kras_5_5,Cells|RadialDistribution_ZernikePhase_Kras_5_1,Cells|RadialDistribution_ZernikePhase_Kras_5_3,Cells|RadialDistribution_ZernikePhase_Kras_2_2,Cells|RadialDistribution_ZernikePhase_Kras_2_0,Cells|RadialDistribution_ZernikePhase_Kras_1_1,Cells|RadialDistribution_ZernikePhase_Kras_0_0,Cells|RadialDistribution_MeanFrac_Kras_4of5,Cells|RadialDistribution_MeanFrac_Kras_1of5,Cells|RadialDistribution_MeanFrac_Kras_5of5,Cells|RadialDistribution_MeanFrac_Kras_3of5,Cells|RadialDistribution_MeanFrac_Kras_2of5,Cells|RadialDistribution_RadialCV_Kras_1of5,Cells|RadialDistribution_RadialCV_Kras_3of5,Cells|RadialDistribution_RadialCV_Kras_5of5,Cells|RadialDistribution_RadialCV_Kras_4of5,Cells|RadialDistribution_RadialCV_Kras_2of5,Cells|RadialDistribution_FracAtD_Kras_5of5,Cells|RadialDistribution_FracAtD_Kras_3of5,Cells|RadialDistribution_FracAtD_Kras_2of5,Cells|RadialDistribution_FracAtD_Kras_1of5,Cells|RadialDistribution_FracAtD_Kras_4of5,Cells|Intensity_MaxIntensity_Kras,Cells|Intensity_MeanIntensity_Kras,Cells|Intensity_MaxIntensityEdge_Kras,Cells|Intensity_MADIntensity_Kras,Cells|Intensity_MinIntensity_Kras,Cells|Intensity_IntegratedIntensity_Kras,Cells|Intensity_MassDisplacement_Kras,Cells|Intensity_MinIntensityEdge_Kras,Cells|Intensity_StdIntensityEdge_Kras,Cells|Intensity_MeanIntensityEdge_Kras,Cells|Intensity_MedianIntensity_Kras,Cells|Intensity_StdIntensity_Kras,Cells|Intensity_LowerQuartileIntensity_Kras,Cells|Intensity_IntegratedIntensityEdge_Kras,Cells|Intensity_UpperQuartileIntensity_Kras,Cells|Location_MaxIntensity_Y_Kras,Cells|Location_MaxIntensity_Z_Kras,Cells|Location_MaxIntensity_X_Kras,Cells|Location_CenterMassIntensity_Z_Kras,Cells|Location_CenterMassIntensity_Y_Kras,Cells|Location_CenterMassIntensity_X_Kras,Cells|Location_Center_Y,Cells|Location_Center_X,Cells|Location_Center_Z,Cells|Children_CellmembraneArea_Count,Cells|Children_WholeCytoplasm_Count,Cells|Number_Object_Number,Cells|Parent_PrimaryCells,Image|ExecutionTime_21SaveImages,Image|ExecutionTime_18GrayToColor,Image|ExecutionTime_14IdentifyTertiaryObjects,Image|ExecutionTime_17SaveImages,Image|ExecutionTime_10RelateObjects,Image|ExecutionTime_08IdentifyTertiaryObjects,Image|ExecutionTime_19OverlayOutlines,Image|ExecutionTime_20DisplayDataOnImage,Image|ExecutionTime_16MeasureObjectIntensityDistribution,Image|ExecutionTime_05ColorToGray,Image|ExecutionTime_02Metadata,Image|ExecutionTime_15MeasureObjectIntensity,Image|ExecutionTime_01Images,Image|ExecutionTime_13IdentifyTertiaryObjects,Image|ExecutionTime_09IdentifyPrimaryObjects,Image|ExecutionTime_03NamesAndTypes,Image|ExecutionTime_11IdentifyTertiaryObjects,Image|ExecutionTime_04Groups,Image|ExecutionTime_06IdentifyPrimaryObjects,Image|ExecutionTime_12ExpandOrShrinkObjects,Image|ExecutionTime_07ExpandOrShrinkObjects,Image|Scaling_raw_image,Image|Metadata_Series,Image|Metadata_Clone,Image|Metadata_FileLocation,Image|Metadata_Cell_Nr,Image|Metadata_Frame,Image|Count_PerinuclearArea,Image|Count_PrimaryCells,Image|Count_CytoplasmArea,Image|Count_Nuclei,Image|Count_ShrunkenCell,Image|Count_ExpandNuclei,Image|Count_WholeCytoplasm,Image|Count_Cells,Image|Count_CellmembraneArea,Image|Group_Length,Image|Group_Index,Image|Group_Number,Image|ModuleError_13IdentifyTertiaryObjects,Image|ModuleError_05ColorToGray,Image|ModuleError_21SaveImages,Image|ModuleError_14IdentifyTertiaryObjects,Image|ModuleError_18GrayToColor,Image|ModuleError_01Images,Image|ModuleError_04Groups,Image|ModuleError_20DisplayDataOnImage,Image|ModuleError_17SaveImages,Image|ModuleError_02Metadata,Image|ModuleError_06IdentifyPrimaryObjects,Image|ModuleError_08IdentifyTertiaryObjects,Image|ModuleError_12ExpandOrShrinkObjects,Image|ModuleError_10RelateObjects,Image|ModuleError_19OverlayOutlines,Image|ModuleError_07ExpandOrShrinkObjects,Image|ModuleError_15MeasureObjectIntensity,Image|ModuleError_16MeasureObjectIntensityDistribution,Image|ModuleError_11IdentifyTertiaryObjects,Image|ModuleError_09IdentifyPrimaryObjects,Image|ModuleError_03NamesAndTypes,Image|MD5Digest_raw_image,Image|Series_raw_image,Image|Threshold_SumOfEntropies_Nuclei,Image|Threshold_WeightedVariance_Nuclei,Image|Threshold_WeightedVariance_PrimaryCells,Image|Threshold_FinalThreshold_Nuclei,Image|Threshold_OrigThreshold_Nuclei,Image|Threshold_OrigThreshold_PrimaryCells,Image|Height_raw_image,Image|FileName_raw_image,Image|Frame_raw_image,Image|PathName_raw_image,Image|URL_raw_image,Image|Width_raw_image,PerinuclearArea|Location_MaxIntensity_X_Kras,PerinuclearArea|Location_MaxIntensity_Y_Kras,PerinuclearArea|Location_MaxIntensity_Z_Kras,PerinuclearArea|Location_Center_Y,PerinuclearArea|Location_Center_X,PerinuclearArea|Location_CenterMassIntensity_Y_Kras,PerinuclearArea|Location_CenterMassIntensity_X_Kras,PerinuclearArea|Location_CenterMassIntensity_Z_Kras,PerinuclearArea|Number_Object_Number,PerinuclearArea|Intensity_MassDisplacement_Kras,PerinuclearArea|Intensity_MinIntensity_Kras,PerinuclearArea|Intensity_MADIntensity_Kras,PerinuclearArea|Intensity_IntegratedIntensity_Kras,PerinuclearArea|Intensity_MeanIntensityEdge_Kras,PerinuclearArea|Intensity_MaxIntensityEdge_Kras,PerinuclearArea|Intensity_UpperQuartileIntensity_Kras,PerinuclearArea|Intensity_MeanIntensity_Kras,PerinuclearArea|Intensity_MinIntensityEdge_Kras,PerinuclearArea|Intensity_MedianIntensity_Kras,PerinuclearArea|Intensity_MaxIntensity_Kras,PerinuclearArea|Intensity_IntegratedIntensityEdge_Kras,PerinuclearArea|Intensity_StdIntensityEdge_Kras,PerinuclearArea|Intensity_LowerQuartileIntensity_Kras,PerinuclearArea|Intensity_StdIntensity_Kras,PerinuclearArea|Parent_Nuclei,PerinuclearArea|Parent_ExpandNuclei,ShrunkenCell|Children_CellmembraneArea_Count,ShrunkenCell|Children_CytoplasmArea_Count,ShrunkenCell|Location_Center_Y,ShrunkenCell|Location_Center_X,ShrunkenCell|Number_Object_Number,CellmembraneArea|Intensity_MassDisplacement_Kras,CellmembraneArea|Intensity_MADIntensity_Kras,CellmembraneArea|Intensity_MinIntensityEdge_Kras,CellmembraneArea|Intensity_MaxIntensity_Kras,CellmembraneArea|Intensity_IntegratedIntensityEdge_Kras,CellmembraneArea|Intensity_IntegratedIntensity_Kras,CellmembraneArea|Intensity_MedianIntensity_Kras,CellmembraneArea|Intensity_MinIntensity_Kras,CellmembraneArea|Intensity_StdIntensity_Kras,CellmembraneArea|Intensity_MeanIntensityEdge_Kras,CellmembraneArea|Intensity_LowerQuartileIntensity_Kras,CellmembraneArea|Intensity_MaxIntensityEdge_Kras,CellmembraneArea|Intensity_StdIntensityEdge_Kras,CellmembraneArea|Intensity_UpperQuartileIntensity_Kras,CellmembraneArea|Intensity_MeanIntensity_Kras,CellmembraneArea|Location_MaxIntensity_Y_Kras,CellmembraneArea|Location_MaxIntensity_X_Kras,CellmembraneArea|Location_MaxIntensity_Z_Kras,CellmembraneArea|Location_CenterMassIntensity_X_Kras,CellmembraneArea|Location_CenterMassIntensity_Y_Kras,CellmembraneArea|Location_CenterMassIntensity_Z_Kras,CellmembraneArea|Location_Center_Y,CellmembraneArea|Location_Center_X,CellmembraneArea|Parent_Cells,CellmembraneArea|Parent_ShrunkenCell,CellmembraneArea|Number_Object_Number,Experiment|Modification_Timestamp,Experiment|Run_Timestamp,Experiment|Pipeline_Pipeline,Experiment|CellProfiler_Version,CytoplasmArea|Location_MaxIntensity_X_Kras,CytoplasmArea|Location_MaxIntensity_Z_Kras,CytoplasmArea|Location_MaxIntensity_Y_Kras,CytoplasmArea|Location_CenterMassIntensity_Z_Kras,CytoplasmArea|Location_CenterMassIntensity_Y_Kras,CytoplasmArea|Location_CenterMassIntensity_X_Kras,CytoplasmArea|Location_Center_X,CytoplasmArea|Location_Center_Y,CytoplasmArea|Intensity_MinIntensityEdge_Kras,CytoplasmArea|Intensity_MinIntensity_Kras,CytoplasmArea|Intensity_UpperQuartileIntensity_Kras,CytoplasmArea|Intensity_MeanIntensityEdge_Kras,CytoplasmArea|Intensity_StdIntensityEdge_Kras,CytoplasmArea|Intensity_MaxIntensityEdge_Kras,CytoplasmArea|Intensity_MassDisplacement_Kras,CytoplasmArea|Intensity_IntegratedIntensity_Kras,CytoplasmArea|Intensity_LowerQuartileIntensity_Kras,CytoplasmArea|Intensity_MADIntensity_Kras,CytoplasmArea|Intensity_MedianIntensity_Kras,CytoplasmArea|Intensity_StdIntensity_Kras,CytoplasmArea|Intensity_MeanIntensity_Kras,CytoplasmArea|Intensity_MaxIntensity_Kras,CytoplasmArea|Intensity_IntegratedIntensityEdge_Kras,CytoplasmArea|Parent_ExpandNuclei,CytoplasmArea|Parent_ShrunkenCell,CytoplasmArea|Number_Object_Number,ExpandNuclei|Mean_PrimaryCells_Location_Center_Y,ExpandNuclei|Mean_PrimaryCells_Location_Center_Z,ExpandNuclei|Mean_PrimaryCells_Location_Center_X,ExpandNuclei|Mean_PrimaryCells_Number_Object_Number,ExpandNuclei|Location_Center_X,ExpandNuclei|Location_Center_Y,ExpandNuclei|Children_PerinuclearArea_Count,ExpandNuclei|Children_PrimaryCells_Count,ExpandNuclei|Children_CytoplasmArea_Count,ExpandNuclei|Number_Object_Number,WholeCytoplasm|Parent_Nuclei,WholeCytoplasm|Parent_Cells,WholeCytoplasm|Location_Center_X,WholeCytoplasm|Location_Center_Y,WholeCytoplasm|Number_Object_Number
+    Representation of Nan/Inf:NaN
+    Add a prefix to file names?:Yes
+    Filename prefix:Intensity_
+    Overwrite existing files without warning?:Yes
+    Data to export:Image
+    Combine these object measurements with those of the previous object?:No
+    File name:DATA.csv
+    Use the object name for the file name?:Yes
+    Data to export:Nuclei
+    Combine these object measurements with those of the previous object?:No
+    File name:DATA.csv
+    Use the object name for the file name?:Yes
+    Data to export:PerinuclearArea
+    Combine these object measurements with those of the previous object?:No
+    File name:DATA.csv
+    Use the object name for the file name?:Yes
+    Data to export:Experiment
+    Combine these object measurements with those of the previous object?:No
+    File name:DATA.csv
+    Use the object name for the file name?:Yes

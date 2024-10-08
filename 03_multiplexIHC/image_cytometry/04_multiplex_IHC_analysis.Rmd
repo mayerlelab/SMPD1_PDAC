@@ -1,0 +1,568 @@
+
+--- 
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__Multiplexing (Spatial distribution)__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+   html_notebook: 
+    theme: united
+    number_sections: true
+    toc: true
+    toc_depth: 2
+    toc_float: true
+    highlight_style: github
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r}
+rm(list = ls())
+
+# load packages ---------------------------------------------------
+scriptLibraries <-  c(
+ "here",
+ "tidyverse",
+ "ggnewscale",
+ "doSNOW",
+ "parallel",
+ "sna",
+ "intergraph",
+ "patchwork"
+)
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+##---------------------------------------------------------------
+##                        load packages                        --
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+```
+
+
+## load image Cytometriy results
+
+```{r}
+# Set up the virtual environment in R
+reticulate::use_condaenv("PYenv", required = TRUE)
+
+# Verify that reticulate detects the environment
+reticulate::py_config()
+
+adata <- anndata::read_h5ad("./mergedData/mergedData_with_phenotypes_cleaned_filtered.h5ad")
+
+SeuratDisk::Convert("./mergedData/mergedData_with_phenotypes_cleaned_filtered.h5ad", dest = "h5seurat", overwrite = TRUE)
+
+sobj <- SeuratDisk::LoadH5Seurat("./mergedData/mergedData_with_phenotypes_cleaned_filtered.h5seurat",  meta.data = FALSE, misc = FALSE)
+
+obs <- rhdf5::h5read("./mergedData/mergedData_with_phenotypes_cleaned_filtered.h5seurat", "/meta.data")
+
+
+meta <- data.frame(lapply(names(obs), function(x) { 
+  if (length(obs[[x]])==2) 
+    obs[[x]][['categories']][ifelse(obs[[x]][['codes']] >= 0, obs[[x]][['codes']] + 1, NA)]
+  else 
+    as.numeric(obs[[x]])
+}
+), row.names=Seurat::Cells(sobj))
+colnames(meta) <- names(obs)
+
+sobj <- Seurat::AddMetaData(sobj,meta)
+
+library(SCP)
+
+p <- CellDimPlot(srt = sobj, 
+                 group.by = "phenotypes",
+                 reduction = "UMAP", 
+                 theme_use = "theme_blank", 
+                 label = TRUE,
+                 label.bg = "transparent",
+                 label.bg.r = 0)
+  
+print(p)
+
+ggsave(filename = "figures/multiplexIHC_UMAP.pdf",
+       plot = p,
+       width = 6,
+       height = 4,
+       dpi = 300)
+
+p <- FeatureDimPlot(
+  srt = sobj, 
+  features = "SMPD1",
+  reduction = "UMAP", 
+  theme_use = "theme_blank"
+)
+
+print(p)
+
+ggsave(filename = "figures/multiplexIHC_UMAP_SMPD1.pdf",
+       plot = p,
+       width = 6,
+       height = 4,
+       dpi = 300)
+
+p <- CellStatPlot(sobj, 
+                  stat.by = "named_clusters", 
+                  group.by = "phenotypes", 
+                  label = TRUE,
+                  label.bg = "transparent",
+                  label.bg.r = 0) +
+  scale_fill_manual(values = c("#E41A1C", "#377EB8"))
+
+print(p)
+
+ggsave(filename = "figures/multiplexIHC_distribution.pdf",
+       plot = p,
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+p <- CellStatPlot(sobj, stat.by = "named_clusters", group.by = "phenotypes", plot_type = "dot")
+
+print(p)
+
+metadata <- adata$obs
+
+## cohort
+df <- metadata %>%
+  dplyr::select(Patient_ID,
+                Gender,
+                Age_at_diagnosis,
+                Vascular_Invasion,
+                L,
+                Pn,
+                Resection_margin_R,
+                Stage_TNM,
+                CA_19_9_base,
+                Description,
+                named_clusters) %>%
+  distinct() %>%
+  mutate(Vascular_Invasion = as.factor(Vascular_Invasion),
+           L = as.factor(L),
+           Pn = as.factor(Pn),
+           Resection_margin_R = as.factor(Resection_margin_R)) %>%
+  dplyr::select(-Patient_ID) %>%
+  gtsummary::tbl_summary(by = named_clusters,
+              missing = "no") %>% 
+  gtsummary::add_n() %>%
+  gtsummary::bold_labels() %>% 
+  gtsummary::as_flex_table() 
+
+df
+```
+
+## Cells abundancer per group
+```{r}
+metadata_tumor <- metadata[grepl("^CancerCells", metadata$phenotypes),] %>%
+  group_by(.id, named_clusters, phenotypes, Progression, Progression_free_survival_days, Overall_survival_days, Death) %>%
+  mutate(count_n = sum(!is.na(phenotypes))) %>%
+  ungroup() %>%
+  select(Patient_ID, named_clusters, phenotypes, Progression, Progression_free_survival_days, Overall_survival_days, Death, count_n) %>%
+  distinct() %>%
+  group_by(Patient_ID, phenotypes) %>%
+  mutate(total_mean_count = median(count_n)) %>% 
+  distinct(Patient_ID, phenotypes, .keep_all=TRUE) %>%
+  ungroup() %>%
+  group_by(Patient_ID) %>%
+  mutate(total_count = sum(total_mean_count)) %>% # Total count per patient
+  mutate(proportion = (total_mean_count / total_count)*100)  %>%
+  ungroup() %>%
+  filter(phenotypes != "CancerCells") %>%
+  mutate(named_clusters = relevel(named_clusters, ref="Low")) %>%
+  group_by(Patient_ID, named_clusters, phenotypes) 
+
+p <-   ggplot(metadata_tumor,
+              aes(x = named_clusters, 
+                  y = proportion, 
+                  fill = named_clusters)) +
+  geom_boxplot(color="black", show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  #geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "wilcox.test", 
+                             label = "p", 
+                             position = "identity", 
+                             ref.group = "Low",
+                             angle= 0) +
+  xlab("") +
+  ylab("SMPD1+ cancer cells (%)")
+
+print(p)
+
+ggsave("figures/smpd1_cancer_cells_prop.pdf",
+       plot=p,
+       width = 2,
+       height = 2,
+       dpi=300)
+
+metadata_immune <- metadata[grepl("^Cyt", metadata$phenotypes),] %>%
+  group_by(.id, named_clusters, phenotypes, Progression, Progression_free_survival_days, Overall_survival_days, Death) %>%
+  mutate(count_n = sum(!is.na(phenotypes))) %>%
+  ungroup() %>%
+  select(Patient_ID, named_clusters, phenotypes, Progression, Progression_free_survival_days, Overall_survival_days, Death, count_n) %>%
+  distinct() %>%
+  group_by(Patient_ID, phenotypes) %>%
+  mutate(total_mean_count = median(count_n)) %>% 
+  distinct(Patient_ID, phenotypes, .keep_all=TRUE) %>%
+  ungroup() %>%
+  group_by(Patient_ID) %>%
+  mutate(total_count = sum(total_mean_count)) %>% # Total count per patient
+  mutate(proportion = (total_mean_count / total_count)*100)  %>%
+  ungroup() %>%
+  filter(phenotypes != "Cytotoxic_T_cells") %>%
+  mutate(named_clusters = relevel(named_clusters, ref="Low")) %>%
+  group_by(Patient_ID, named_clusters, phenotypes) 
+
+p <-   ggplot(metadata_immune,
+              aes(x = named_clusters, 
+                  y = proportion, 
+                  fill = named_clusters)) +
+  geom_boxplot(color="black", show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  #geom_jitter(shape = 21, size = 3, color = "black", alpha= 0.5, show.legend = FALSE) +
+  theme_bw() +
+  ggpubr::stat_compare_means(method = "wilcox.test", 
+                             label = "p", 
+                             position = "identity", 
+                             ref.group = "Low",
+                             angle= 0) +
+  xlab("") +
+  ylab("SMPD1+ Cytotoxic T-cells (%)")
+
+print(p)
+
+ggsave("figures/smpd1_cyt_t_cells_prop.pdf",
+       plot=p,
+       width = 2,
+       height = 2,
+       dpi=300)
+
+```
+
+## Linear discriminant analysis for abundance
+```{r}
+metadata_pca <- metadata %>%
+  group_by(.id, named_clusters, phenotypes) %>%
+  mutate(count_n = sum(!is.na(phenotypes))) %>%
+  ungroup() %>%
+  dplyr::select(Patient_ID, named_clusters, phenotypes, count_n) %>%
+  distinct() %>%
+  group_by(Patient_ID, phenotypes) %>%
+  mutate(count_n = median(count_n, na.rm = TRUE)) %>% 
+  distinct(Patient_ID, phenotypes, .keep_all=TRUE) %>%
+  ungroup() %>% 
+  group_by(Patient_ID) %>%
+  mutate(total_count = sum(count_n)) %>% # Total count per patient
+  mutate(proportion = (count_n / total_count)*100) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(Patient_ID, named_clusters), names_from = "phenotypes", values_from = "count_n", values_fill = 0)  %>%
+    mutate(across(where(is.numeric), scale))
+
+
+pca.dat.analysis <- metadata_pca  %>%
+    dplyr::select(-all_of(c("Patient_ID")))
+
+lda_bootstrap_results <- list()
+
+n_bootstraps <- 1000
+
+# Loop for bootstrapping
+set.seed(123)  # For reproducibility
+for (i in 1:n_bootstraps) {
+  
+  # Bootstrap resampling with replacement
+  bootstrap_sample <- pca.dat.analysis %>%
+    slice_sample(prop = 1, replace = TRUE)
+  
+  # Perform LDA on the bootstrap sample
+  lda_bootstrap <- MASS::lda(named_clusters ~ ., data = bootstrap_sample)
+  
+  # Store the results
+  lda_bootstrap_results[[i]] <- lda_bootstrap
+}
+
+lda_bootstrap_results[[1]]$scaling
+
+#linear <- MASS::lda(named_clusters~., pca.dat.analysis)
+
+# Extracting the LDA scaling (coefficients) from each bootstrap
+lda_scalings <- lapply(lda_bootstrap_results[1:n_bootstraps], function(model) model$scaling)
+
+# Convert the list of scalings into a 3D array (rows: variables, columns: discriminants, depth: bootstraps)
+lda_scaling_array <- array(unlist(lda_scalings), 
+                           dim = c(nrow(lda_scalings[[1]]), ncol(lda_scalings[[1]]), n_bootstraps))
+
+# Calculate the mean and standard deviation across the bootstrap samples
+lda_scaling_mean <- apply(lda_scaling_array, c(1, 2), mean)  # Mean across bootstraps
+lda_scaling_sd <- apply(lda_scaling_array, c(1, 2), sd)   
+
+## pca loading plot
+loading.data <- data.frame(loading=lda_scaling_mean,
+                           sd = lda_scaling_sd) 
+loading.data$phenotypes <- rownames(lda_bootstrap_results[[1]]$scaling)
+
+## Create new columns for directional error bars
+loading.data$upper <- ifelse(loading.data$loading > 0, loading.data$loading + loading.data$sd, NA)
+loading.data$lower <- ifelse(loading.data$loading < 0, loading.data$loading - loading.data$sd, NA)
+
+
+colors <- RColorBrewer::brewer.pal(2, "Set1")
+  
+p_loading <- ggplot(loading.data,
+                    aes(x = reorder(phenotypes, loading),
+                        y = loading,
+                        fill = loading > 0)) +
+    geom_bar(stat="identity", 
+             color = "black",
+             alpha =0.5) +
+  geom_errorbar(aes(ymin = ifelse(loading < 0, lower, loading),
+                      ymax = ifelse(loading > 0, upper, loading)),
+                  width = 0.2,
+                  position = position_dodge(0.9)) +
+    theme_bw() +
+    theme(
+      panel.border = element_rect(colour = "black", fill=NA, size=1),
+      axis.text = element_text(
+        size = 11,
+        #face = "bold",
+        colour = "black"
+      ),
+      axis.title = element_text(size = 12, face = "bold")
+    ) +
+    scale_fill_manual(values = colors) +
+    theme(legend.position = "bottom") +
+    labs(x="",
+         y="Coefficients of linear discriminants") +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) +
+    guides(fill="none")
+
+print(p_loading)
+  
+ggsave("figures/lda_loading.pdf",
+       plot=p_loading,
+       width = 3,
+       height = 5,
+       dpi=300)
+
+
+pca <- prcomp(pca.dat.analysis[,-1],
+              center = FALSE,
+              scale. = FALSE)
+
+
+
+## plot PCA
+plot.dat.pca <- as.data.frame(pca$x)
+plot.dat.pca[["named_clusters"]] <- metadata_pca$named_clusters
+  
+## PCA componants
+pc1var <- round(summary(pca)$importance[2, 1] * 100, digits = 2)
+pc2var <- round(summary(pca)$importance[2, 2] * 100, digits = 2)
+  
+## 
+colors <- RColorBrewer::brewer.pal(2, "Set1")
+  
+## plot
+p_pca <- ggplot(plot.dat.pca, 
+                aes(x = PC1,
+                    y = PC2,
+                    fill = named_clusters)) +
+    geom_point( color="black",
+                shape=21,
+                size = 3,
+                alpha = 0.8
+    ) +
+    xlab(paste0("PC1: ", pc1var, "%")) +
+    ylab(paste0("PC2: ", pc2var, "%")) +
+    labs(color = "named_clusters") +
+    theme_bw() +
+    theme(
+      panel.border = element_rect(colour = "black", fill=NA, size=1),
+      axis.text = element_text(
+        size = 11,
+        #face = "bold",
+        colour = "black"
+      ),
+      axis.title = element_text(size = 12, face = "bold")
+    ) +
+    scale_fill_manual(values = colors) +
+    theme(legend.position = "bottom")
+  
+density_pc1 <- ggplot(plot.dat.pca, 
+                      aes(x = PC1,
+                          fill = named_clusters)) +
+    geom_density(color="black", alpha=0.5) +
+    scale_fill_manual(values = colors) +
+    theme_void() +
+    guides(fill="none",
+           color="none", 
+           alpha="none")
+
+density_pc2 <- ggplot(plot.dat.pca, 
+                      aes(x = PC2,
+                          fill = named_clusters)) +
+    geom_density(color="black", alpha=0.5) +
+    scale_fill_manual(values = colors) +
+    theme_void() +
+    guides(fill="none",
+           color="none", 
+           alpha="none") +
+    coord_flip()
+  
+pca_plot <- density_pc1 + plot_spacer() + 
+    p_pca + density_pc2 +
+    plot_layout(ncol = 2, 
+                nrow=2,
+                width= c(4,1),
+                heights = c(1,4))
+
+print(pca_plot)
+
+## pca loading plot
+loading.data <- data.frame(loading=pca$rotation[,2]) 
+loading.data$phenotypes <- rownames(loading.data)
+
+colors <- RColorBrewer::brewer.pal(2, "Set1")
+  
+p_loading <- ggplot(loading.data,
+                    aes(x = reorder(phenotypes, loading),
+                        y = loading,
+                        fill = loading > 0)) +
+    geom_bar(stat="identity", 
+             color = "black",
+             alpha =0.5) +
+    theme_bw() +
+    theme(
+      panel.border = element_rect(colour = "black", fill=NA, size=1),
+      axis.text = element_text(
+        size = 11,
+        #face = "bold",
+        colour = "black"
+      ),
+      axis.title = element_text(size = 12, face = "bold")
+    ) +
+    scale_fill_manual(values = colors) +
+    theme(legend.position = "bottom") +
+    labs(x="",
+         y=paste("Principle componant", 
+                 2, 
+                 "loading")) +
+    theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 1)) +
+    guides(fill="none")
+  
+print(p_loading)
+
+stat<- plot.dat.pca  %>%
+  rstatix::t_test(PC4~named_clusters)
+
+stat
+
+ggsave("figures/lda_loading.pdf",
+       plot=p_loading,
+       width = 3,
+       height = 5,
+       dpi=300)
+
+```
+
+# neighbourhood correlation
+
+```{r}
+data <- adata$X %>%
+  as.data.frame()
+
+## create data subset
+metadata_sub <- metadata[, colnames(metadata) %in% c(".id","Patient","Core","IMAGENUMBER",  "X", "Y", "phenotypes" )]
+
+data_filtered <- merge(data, metadata_sub, by=0)
+
+classifier <- as.character(unique(data_filtered$phenotypes))
+#classifier <- classifier[grepl("_SMPD1", classifier)]
+
+metadata_unique <- metadata[,colnames(metadata) %in% c("Patient_ID", "named_clusters")] %>%
+  distinct()
+
+dat <- data_filtered %>%
+  group_by(.id, phenotypes) %>%
+  summarise(count=n()) %>%
+  ungroup() %>%
+  mutate(.id = gsub(" I| II| CTX", "", .id)) %>%
+  separate(col=.id, 
+           into = c("Patient_ID","Core"), 
+           sep = "_", 
+           remove = TRUE) %>%
+  dplyr::select(-Core) %>%
+  group_by(phenotypes, Patient_ID) %>%
+  summarise(count = mean(count)) %>%
+  ungroup() %>%
+  group_by(Patient_ID) %>%
+  mutate(freq = (count / sum(count))*100) %>%
+  dplyr::select(-count) %>%
+  pivot_wider(names_from  = phenotypes, values_from = freq) %>%
+  inner_join(metadata_unique, by = "Patient_ID") %>%
+  dplyr::select(all_of(c("Patient_ID", classifier, "named_clusters"))) %>%
+  ungroup()
+```
+## correlation abundance
+```{r}
+dist.plot.data <- dat %>%
+  pivot_longer(c(-named_clusters, -Patient_ID), names_to = "phenotypes", values_to = "value") %>%
+  filter(grepl("_SMPD1", phenotypes)) %>%
+  mutate(phenotypes = if_else(phenotypes != "CancerCells_SMPD1", "ImmuneCells_SMPD1", phenotypes)) %>%
+  group_by(named_clusters, Patient_ID, phenotypes) %>%
+  summarise(across(where(is.numeric), ~sum(., na.rm = TRUE))) %>%
+  ungroup() %>%
+  pivot_wider(id_cols = c(named_clusters, Patient_ID),
+              names_from = phenotypes,
+              values_from = value)
+
+
+dist.plot.data$named_clusters <- factor(dist.plot.data$named_clusters,
+                                        levels = c("Low", "High"))
+
+p <- ggplot(dist.plot.data,
+            aes(x=CancerCells_SMPD1,
+                y=ImmuneCells_SMPD1,
+                fill= named_clusters)) +
+  geom_point(shape=21,
+             color="black",
+             size=3,
+             alpha= 0.5,
+             show.legend = FALSE) +
+  geom_smooth(aes(color=named_clusters),
+              method = "lm", 
+              formula = y ~ x,
+                se=FALSE, 
+                size=2,
+              show.legend = FALSE) +
+  ggpubr::stat_cor() +
+  theme_bw() +
+  xlab("Abundence of SMPD1+ Cancer Cells") +
+  ylab("Abundence of SMPD1+ Immune Cells") +
+  facet_wrap(~named_clusters,
+             scales= "free_x") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  scale_color_manual(values = c("#377EB8","#E41A1C"))
+
+print(p)
+  
+  ggsave(filename = "figures/correlation_abundance.pdf",
+       plot = plot,
+       width = 7,
+       height = 5,
+       dpi = 300)
+
+```
+
+# computing environment
+```{r warning=FALSE}
+sessionInfo()
+```
+
