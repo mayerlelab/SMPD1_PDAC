@@ -51,7 +51,7 @@
 ## Fiji and cell profiler
   tested for 2.1.0/1.53c 
   
-Run all fiji analysis using [multiplexIHC.sh]([03_multiplexIHC/multiplexIHC.sh](https://github.com/mayerlelab/SMPD1_PDAC/blob/main/03_multiplexIHC/multiplexIHC.sh)) then processed with for [Image Cytometry](03_multiplexIHC/image_cytometry/01_Image_Cytometry.Rmd), [data merging](03_multiplexIHC/image_cytometry/02_data_merging.Rmd) and anndata preparation.
+Run all fiji analysis using [multiplexIHC.sh]([03_multiplexIHC/multiplexIHC.sh](https://github.com/mayerlelab/SMPD1_PDAC/blob/main/03_multiplexIHC/multiplexIHC.sh) then processed with for [Image Cytometry](03_multiplexIHC/image_cytometry/01_Image_Cytometry.Rmd), [data merging](03_multiplexIHC/image_cytometry/02_data_merging.Rmd) and anndata preparation.
 
 
 Cleaned Image cytometry analyzed results then processed for [multiplex_IHC analysis](03_multiplexIHC/image_cytometry/04_multiplex_IHC_analysis.Rmd). 
