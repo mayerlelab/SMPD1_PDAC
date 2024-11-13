@@ -1,10 +1,3 @@
-<style>
-r { color: Red }
-o { color: Orange }
-g { color: Green }
-bl { color: Blue }
-</style>
-
 # Cloning sgRNA into Vector
 
 ## Introduction
