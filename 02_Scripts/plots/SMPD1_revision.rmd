@@ -1,0 +1,2244 @@
+---
+title: "Functional role of SMPD1 in PDAC"
+subtitle: "__graph pad__"
+author: "_umahajan_"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_notebook:
+    theme: united
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+    toc_float: false
+---
+
+```{r setup, include=FALSE}
+chooseCRANmirror(graphics=TRUE, ind=1)
+knitr::opts_chunk$set(tidy.opts=list(width.cutoff=85),tidy=TRUE, echo=TRUE, warning=FALSE, message=FALSE)
+```
+
+# load packages and datasets
+
+```{r packages}
+rm(list = ls())
+##----------------------------------------------------------------
+##                        load packages                        --
+##----------------------------------------------------------------
+scriptLibraries <-  c(
+  "here",
+  "tidyverse",
+  "readxl",
+  "RColorBrewer",
+  "ggpubr",
+  "rstatix",
+  "drc",
+  "scales",
+  "FSA"
+  
+)
+
+#devtools::install_github("umahajanatlmu/metapacR", ref="master", auth_token = "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")
+
+##---------------------------------------------------------------
+##                      load functions                         --
+##---------------------------------------------------------------
+devtools::source_url("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+
+# load packages 
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+
+## results directory
+ifelse(!dir.exists(file.path(paste0(here()), "results_graphpad")),
+       dir.create(file.path(paste0(here()), "results_graphpad")), FALSE)
+
+save_plot <- function(x, filename, width = 7, height = 7) {
+    stopifnot(!missing(x))
+    stopifnot(!missing(filename))
+    svg(filename, width = width, height = height)
+    grid::grid.newpage()
+    grid::grid.draw(x)
+    dev.off()
+}
+```
+
+# plot graphs
+
+## Oroboros
+```{r}
+tables <- pzfx::pzfx_tables("20260131_Oroboros/Results_Wt_vs_C5/Oroborus_Analysis_WTvsC5.pzfx")
+
+## create dataframe
+
+oro_df <- data.frame()
+
+i <- 1
+for (t in tables) {
+  
+  print(t)
+  df <- pzfx::read_pzfx("20260131_Oroboros/Results_Wt_vs_C5/Oroborus_Analysis_WTvsC5.pzfx", table = t) %>%
+    pivot_longer(cols = everything(),names_to = "Clone", values_to = "conc") %>%
+    mutate(conc = gsub(",",".", conc)) %>%
+    mutate(resp = t, index = i)
+  
+  oro_df <- bind_rows(oro_df,df)
+  
+  i <- i +1
+  
+}
+
+oro_df$conc <- as.numeric(oro_df$conc)
+oro_df$clone <- ifelse(oro_df$Clone == "WT", "WT", "KO")
+oro_df$clone <- factor(oro_df$clone, levels=c("WT", "KO"))
+
+
+
+# Order the factor levels by your index column
+oro_df$resp <- factor(oro_df$resp, levels = unique(oro_df$resp[order(oro_df$index)]))
+
+p <- ggplot(data=oro_df) +
+  geom_boxplot(aes(x= clone, 
+                  y= conc,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= clone, 
+                  y= conc, 
+                  fill=Clone),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8,
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#EF8A62","#D1E5F0")) +
+  theme_publication() +
+  xlab("") +
+  ylab("Specific O2 flux (pmol/s*ml)") +
+  facet_wrap(~resp, scales = "free_y") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.15))) +
+  stat_compare_means(data=oro_df, 
+                     aes(x= clone, 
+                         y= conc), 
+                     label = "..p..",
+                     method = "t.test",
+                     show.legend = FALSE)
+
+
+print(p)
+
+ggsave("oroboros.pdf",
+       plot = p, 
+       width = 18,
+       height = 15,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+## fcs data
+```{r}
+library(flowCore)
+library(flowViz)
+library(ggplot2)
+
+# Your data is already loaded as 'fs'
+fs <- read.flowSet(path = "20260101_FCS_Cell_Cycle/", pattern = ".fcs", transformation = FALSE)
+
+# Check if all files have the same channels
+fsApply(fs, function(ff) parameters(ff)$name)
+
+# 1. Quality Control - Gate on singlets using FSC-A vs FSC-H
+# Create a singlet gate (adjust coordinates based on your data)
+singlet_gate <- rectangleGate(filterId="Singlets",
+                               "FSC-A"=c(0, 250000),
+                               "FSC-H"=c(0, 250000))
+
+# Apply singlet gating
+fs_singlets <- Subset(fs, singlet_gate)
+
+# 2. Gate on viable cells using FSC-A vs SSC-A
+viable_gate <- rectangleGate(filterId="Viable",
+                              "FSC-A"=c(50000, 250000),
+                              "SSC-A"=c(0, 250000))
+
+fs_viable <- Subset(fs_singlets, viable_gate)
+
+# 3. Extract PE-A (DNA content) data
+# View histogram of negative control first
+neg_control <- fs_viable[["NG_Tube_001_013.fcs"]]
+plot(density(exprs(neg_control)[,"PE-A"]), 
+     main="Negative Control - PE-A Distribution",
+     xlab="PE-A (DNA Content)")
+
+# 4. Cell cycle gating (adjust thresholds based on your data)
+# You'll need to identify G0/G1, S, and G2/M peaks
+# Example gates (ADJUST THESE based on your histogram):
+G1_gate <- rectangleGate(filterId="G1", "PE-A"=c(2000, 4000))
+S_gate <- rectangleGate(filterId="S", "PE-A"=c(4000, 5000))
+G2M_gate <- rectangleGate(filterId="G2M", "PE-A"=c(5000, 50000))
+
+# 5. Calculate cell cycle percentages for each sample
+calculate_cell_cycle <- function(ff) {
+  pe_data <- exprs(ff)[,"PE-A"]
+  
+  
+  # Adjust these thresholds based on your data
+  G1_count <- sum(pe_data > 2000 & pe_data < 4000)
+  S_count <- sum(pe_data > 4000 & pe_data <5000)
+  G2M_count <- sum(pe_data > 5000 & pe_data < 50000)
+  
+  total <- G1_count + S_count + G2M_count
+  
+  return(c(G1=G1_count/total*100, 
+           S=S_count/total*100, 
+           G2M=G2M_count/total*100))
+}
+
+# Apply to all samples (excluding negative control)
+fs_samples <- fs_viable[sampleNames(fs_viable) != "NG_Tube_001_013.fcs"]
+cell_cycle_results <- fsApply(fs_samples, calculate_cell_cycle)
+
+# 6. Create results dataframe
+results_df <- as.data.frame(cell_cycle_results)
+results_df$Sample <- rownames(results_df)
+results_df$clone_id <- gsub("_R[0-9].*", "", results_df$Sample)
+
+print(results_df)
+
+# 7. Visualize results
+library(reshape2)
+results_long <- melt(results_df, id.vars=c("Sample", "clone_id"))  
+results_long$clone <- ifelse(results_long$clone_id == "WT", "WT", "KO")
+
+results_long$clone_id <- factor(results_long$clone_id, c("WT", "C3", "C5", "C6"))
+
+results_long$clone <- factor(results_long$clone, c("WT", "KO"))
+
+plot <- ggplot(results_long) +
+  stat_summary(aes(x = variable, y = value, fill = clone),
+               fun = mean, geom = "bar",
+               position = position_dodge(0.9), color = "black") +
+  stat_summary(aes(x = variable, y = value, fill = clone),
+               fun.data = mean_sd, geom = "errorbar",
+               width = 0.5, position = position_dodge(0.9)) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_point(aes(x = variable, 
+                 y = value, 
+                 fill = clone_id,
+                 group = clone),  
+             size = 3, 
+             position = position_jitterdodge(jitter.width = 0.4, 
+                                             dodge.width = 0.9),
+             shape = 21, 
+             color = "black",
+             alpha = 0.8) +
+  stat_compare_means(aes(x = variable, 
+                         y = value,
+                         group = clone), 
+                     method = "t.test",
+                     method.args = list(formula = value ~ variable),
+                     label = "p.format", 
+                     na.rm = TRUE, bracket.size = 1) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  xlab("") +
+  ylab("Percentage (%)") +
+  theme_publication()
+
+plot
+
+ggsave("cell_cycle.pdf",
+       plot = plot, 
+       width = 9,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+## lysotracker
+```{r}
+dat <- read.csv("20260202_lysotracker/output/LysT_lysotracterObjects.csv") %>%
+  dplyr::select(Metadata_clone,AreaShape_Area,Intensity_MeanIntensity_lysotracker)
+
+colnames(dat) <- c("Clone_ID", "Area", "Intensity")
+
+dat <- reshape2::melt(dat, id.vars=c("Clone_ID"))
+
+dat$Clone_ID <- toupper(dat$Clone_ID)
+
+dat$Clone <- ifelse(dat$Clone_ID == "WT", "WT", "KO")
+
+dat$Clone <- factor(dat$Clone, c("WT", "KO"))
+
+dat <- dat[dat$variable == "Area",]
+
+p <- ggplot(data=dat) +
+  geom_violin(aes(x= Clone, 
+                  y= value,
+                  fill=Clone), 
+               color="black",
+              alpha = 0.5,
+               show.legend = FALSE) +
+  geom_boxplot(aes(x= Clone, 
+                  y= value,
+                  fill=Clone), 
+               width=0.1,
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=dat, 
+                     aes(x= Clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  ylab("Arbitrary Units") +
+  ggtitle("Lysosomes")
+
+print(p)
+
+
+ggsave("lysotracker.pdf",
+       plot = p, 
+       width = 6,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## lysotracker kras
+```{r}
+dat <- read.csv("../../Data/KRAS_IF/output_dist/LysT_RelateObjects_nonperinuclear_lysosomes.txt",sep = "") %>%
+  dplyr::select(Metadata_clone,Metadata_replicate,AreaShape_Area,Intensity_MeanIntensity_lysotracker) 
+
+colnames(dat) <- c("Clone_ID", "replicate","Area","Intensity")
+
+dat <- reshape2::melt(dat, id.vars=c("Clone_ID", "replicate"))
+
+dat <- dat %>%
+  group_by(Clone_ID, replicate, variable) %>%
+  summarise_if(is.numeric, median) %>%
+  ungroup()
+
+dat$Clone_ID <- toupper(dat$Clone_ID)
+
+dat$Clone <- ifelse(dat$Clone_ID == "WT", "WT", "KO")
+
+dat$Clone <- factor(dat$Clone, c("WT", "KO"))
+
+
+dat <- dat[dat$variable == "Intensity",]
+
+p <- ggplot(data=dat) +
+  geom_boxplot(aes(x= Clone, 
+                  y= value,
+                  fill=Clone), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= Clone, 
+                  y= value, 
+                  fill=Clone_ID),
+              #size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=dat, 
+                     aes(x= Clone, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_publication() +
+  xlab("") +
+  ylab("Area (AU)") +
+  ggtitle("Kras in lysosomes")
+
+print(p)
+
+ggsave("kras_lysosomes.pdf",
+       plot = p, 
+       width = 9,
+       height = 10,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+
+## orthotopic injection
+```{r}
+colony <- read_excel("20260205_invivo_expt/Animal data.xlsx", 1)
+
+colony <- separate(colony, col="cells", into = c("clone", "treatment"))
+
+
+colony$clone <- factor(colony$clone, levels=c("WT", "C3"))
+colony$treatment <- factor(colony$treatment, levels=c("control", "treat"))
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= clone, 
+                  y= `Weight (Pancreas+tumor) (gm)`,
+                  fill=clone), 
+               color="black",
+               show.legend = FALSE) +
+  geom_jitter(aes(x= clone, 
+                  y= `Weight (Pancreas+tumor) (gm)`,
+                  fill=clone), size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=colony, 
+                     aes(x= clone, 
+                         y= `Weight (Pancreas+tumor) (gm)`), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  ylab("Tumor weight in g") +
+  ggtitle("Tumor weight") +
+  facet_wrap(~treatment)
+
+print(p)
+
+ggsave("20260205_invivo_expt/tumor_weights_mrtx.pdf",
+       plot = p, 
+       width = 10,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+
+## spinder plot
+df <- read_excel("20260205_invivo_expt/Animal data.xlsx", 2) %>%
+  separate(col = "cells", into = c("clone", "treatment")) %>%
+  mutate(across(-c(Animal_number, clone, treatment), as.character)) %>%
+  dplyr::select(-Cage_ID) %>%
+  pivot_longer(cols = -c(Animal_number, clone, treatment), names_to = "date", values_to = "weight") %>%
+  mutate(
+    date = as.Date(as.numeric(date), origin = "1899-12-30"),
+    weight = as.numeric(weight)
+  ) %>%
+  mutate(day = as.numeric(date - min(date)) + 1)
+
+df$clone <- factor(df$clone, levels=c("WT", "C3"))
+df$treatment <- factor(df$treatment, levels=c("control", "treat"))
+
+p <- ggplot(df, aes(x = day, y = weight, group = Animal_number, color = treatment)) +
+  geom_line(alpha = 0.4, size = 0.6) +   # individual animals
+  
+  # SD ribbon
+  stat_summary(
+    aes(group = treatment, fill = treatment),
+    fun.data = mean_sdl,
+    fun.args = list(mult = 1),
+    geom = "ribbon",
+    alpha = 0.2,
+    color = NA
+  ) +
+  
+  # Mean line
+  stat_summary(
+    aes(group = treatment),
+    fun = mean,
+    geom = "line",
+    linewidth = 1.5
+  ) +
+  
+  theme_publication() +
+  labs(title = "Animal Weight Over Time",
+       x = "Days after Tumor Implantation",
+       y = "Weight (g)",
+       color = "Treatment",
+       fill = "Treatment") +
+  scale_color_manual(values = c("#377EB8","#E41A1C")) +
+  facet_wrap(~clone)
+
+ggsave("20260205_invivo_expt/animal_weight.pdf",
+       plot = p, 
+       width = 10,
+       height = 10,
+       dpi = 300,
+       units = "cm")  
+
+```
+
+
+## Kras IF
+```{r}
+dat_pm <- read.csv("../../Data/KRAS_IF/output_dist/Intensity_CellmembraneArea.csv")
+dat_pm$subcell <- "Plasma membrane"
+dat_cyt <- read.csv("../../Data/KRAS_IF/output_dist/Intensity_CytoplasmArea.csv")
+dat_cyt$subcell <- "Cytoplasm"
+
+
+
+dat <- dat_pm %>%
+  bind_rows(dat_cyt) %>%
+  group_by(Metadata_Clone, Metadata_Cell_Nr, subcell) %>%
+  summarise(mean_value = median(Intensity_MedianIntensity_Kras)) %>%
+  ungroup()
+
+dat$Metadata_Clone <- factor(dat$Metadata_Clone, levels=c("WT", "C3", "C5","C6"))
+dat$group <- ifelse(dat$Metadata_Clone %in% "WT", "WT","KO")
+dat$group <- factor(dat$group, levels=c("WT", "KO"))
+
+p <- ggplot(data=dat) +
+  geom_boxplot(aes(x= group, 
+                  y= mean_value,
+                  fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= group, 
+                  y= mean_value, 
+                  fill=Metadata_Clone),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=dat, 
+                     aes(x= group, 
+                         y= mean_value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Median fluorescence Intensity [AU]") +
+  ggtitle("Kras accumulation") +
+  facet_wrap(~subcell)
+
+
+print(p)
+
+ggsave("kras_cytoplasm.pdf",
+       plot = p, 
+       width = 9,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+## Organoids treatment
+```{r}
+df <- read_excel("20260225_organoids/organoid_data.xlsx")
+
+df$group <- factor(df$group, levels = c("Control", "MRTX1133",
+                                        "ARC39", "ARC39+MRTX1133"))
+
+
+
+# compute per-facet (POB) y-range so label offsets scale properly
+ranges <- df %>%
+  group_by(POB) %>%
+  summarize(ymin = min(value, na.rm = TRUE),
+            ymax = max(value, na.rm = TRUE),
+            .groups = "drop")
+
+# compute the group-median per (POB, group) and pick the lowest group-median per POB
+hlines <- df %>%
+  group_by(POB, group) %>%
+  summarize(group_med = median(value, na.rm = TRUE), .groups = "drop") %>%
+  group_by(POB) %>%
+  slice_min(group_med, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  rename(median_lowest = group_med) %>%
+  left_join(ranges, by = "POB") %>%
+  mutate(offset = 0.05 * (ymax - ymin),   # 5% of y-range; tweak this if needed
+         x = Inf)                         # place labels near the right edge of each facet
+
+# original plot (your code)
+p <- ggplot(data = df) +
+  geom_boxplot(aes(x = group, y = value, fill = group),
+               color = "black", show.legend = FALSE) +
+  geom_jitter(aes(x = group, y = value, fill = group),
+              size = 3, width = 0.4, shape = 21, color = "black", alpha = 0.8,
+              show.legend = FALSE) +
+  scale_fill_manual(values = c("#E41A1C","#3182BD", "#9ECAE1" ,"#DEEBF7" )) +
+  stat_compare_means(data = df,
+                     aes(x = group, y = value),
+                     label = "..p..",
+                     ref.group = "Control",
+                     method = "t.test",
+                     angle = 90,
+                     show.legend = FALSE) +
+  theme_publication() +    
+  xlab("") +
+  labs(fill = "") +
+  ylab("% Cell viability") +
+  facet_wrap(~POB)
+
+# add horizontal line and labels per facet
+p2 <- p +
+  geom_hline(data = hlines,
+             aes(yintercept = median_lowest),
+            color = "black",
+             inherit.aes = FALSE) +
+  # label above the line
+  geom_text(data = hlines,
+            aes(x = x, y = median_lowest + offset, label = "antagonism"),
+            hjust = 1.1, vjust = 0, size = 3.5, inherit.aes = FALSE) +
+  # label below the line
+  geom_text(data = hlines,
+            aes(x = x, y = median_lowest - offset, label = "synergism"),
+            hjust = 1.1, vjust = 1, size = 3.5, inherit.aes = FALSE)
+
+print(p2)
+
+
+ggsave("20260225_organoids/treatment.pdf",
+       plot = p2, 
+       width = 12,
+       height = 9,
+       dpi = 300,
+       units = "cm")
+```
+
+## Classical Cells EMT
+```{r}
+
+library(ggpubr)
+library(ggsignif)
+
+df <- read.csv("20260228_EMT_SM_Ceramide/output/Intensity_Cells.csv") %>%
+  dplyr::select(Metadata_cell_line, Metadata_treatment,
+                Intensity_MeanIntensity_CER,Intensity_MeanIntensity_SM ) %>%
+  pivot_longer(cols=c("Intensity_MeanIntensity_CER","Intensity_MeanIntensity_SM"), values_to = "intensity", names_to = "expression") %>%
+  mutate(expression = gsub("Intensity_MeanIntensity_","", expression))
+
+
+
+p <- ggplot(df,
+            aes(x=expression,
+                y=intensity,
+                fill=Metadata_treatment)) +
+  geom_boxplot()+
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Mean fluorescence Intensity [AU]") +
+  facet_wrap(~Metadata_cell_line) 
+
+stat.test <- df %>%
+  group_by(expression, Metadata_cell_line) %>%
+  t_test(intensity ~ Metadata_treatment) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>%
+  add_xy_position(x = "expression", dodge = 0.8)
+
+
+p <- p + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0
+  ) 
+
+ggsave("20260228_EMT_SM_Ceramide/cytoplasm.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+## SEM analysis
+```{r}
+df <- read_excel("20251219_TEM/analysis of SEM.xlsx") %>%
+  separate(`Cell ID`, into = c("clone", "image", "replicate")) %>%
+  mutate(group = ifelse(clone == "WT", "WT", "KO"))
+
+df$group <- factor(df$group, c("WT", "KO"))
+
+
+p <- ggplot(data=df) +
+  geom_boxplot(aes(x= group, 
+                  y= `outward invasion in %`,
+                  fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= group, 
+                  y= `outward invasion in %`, 
+                  fill=clone),
+              #size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=df, 
+                     aes(x= group, 
+                         y= `outward invasion in %`), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B","#EF8A62","#FDDBC7", "#D1E5F0")) +
+  theme_publication() +
+  xlab("")+
+  ylab("% of Protrusions per um2") +
+  ggtitle("Cell Protrusions") 
+
+print(p)
+
+ggsave("20251219_TEM/cell_protrusion.pdf",
+       plot = p, 
+       width = 9,
+       height = 10,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+## SMPD1 stage dependent 
+```{r}
+metadata <- readRDS("../../Data/TCGA/parsed_data_mauer_phenodata.rds")
+dat <- readRDS("../../Data/TCGA/parsed_data_maurer_normalized.rds") %>%
+  as.data.frame() 
+
+dat <- log2(dat+1)
+
+dat <- dat["SMPD1",]
+
+library(dplyr)
+
+dat <- dat %>%
+  sjmisc::rotate_df() %>%
+  rownames_to_column("Sample.Name") %>%
+  inner_join(metadata, by = "Sample.Name") %>%
+  filter(compartment == "Epithelium") %>%
+  drop_na(AJCC_Stage) %>%
+  mutate(
+    stage = case_when(
+      AJCC_Stage %in% c("1A","2A", "2B")    ~ "I-II",
+      AJCC_Stage %in% c("3", "4")  ~ ">II",
+      TRUE ~ NA_character_)
+  )
+
+
+dat$stage <- factor (dat$stage, levels = c("I-II", ">II"))
+
+
+ p <- ggplot(dat,
+             aes(x=stage,
+                 y=SMPD1, 
+                 fill = stage)) +
+   geom_boxplot() +
+   geom_jitter(shape=21,
+               color="black", alpha=0.5) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=dat, 
+                     aes(x= stage, 
+                         y= SMPD1), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("log2 Normalized expression") +
+  ggtitle("SMPD1") 
+   
+print(p)
+
+ggsave("SMPD1_expression_Mauer.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm") 
+```
+
+## ARC39 proliferation
+
+```{r}
+df <- readxl::read_xlsx("20260227_MTT_activity/MTT-summary-ARC-39.xlsx", 3)
+
+
+
+### replace zero to 0.001 for concentration
+df$Dose[df$Dose == 0] <-0.001
+
+
+
+
+### mean and sd
+mtt.dat <- df %>%
+  filter(Hours == 96) %>%
+  filter(Group == "WT") %>%
+  group_by(Group, Dose, Hours) %>%
+  summarize(mean = mean(MTT),
+            sd = sd(MTT))
+
+
+
+
+p <- ggplot(mtt.dat, 
+            aes(
+              x = Dose, 
+              y = mean, 
+              color = Group
+    )) +
+      geom_errorbar(
+        aes(ymax = mean + sd, ymin = mean - sd),
+        lwd = 1,
+        alpha = 0.5
+      ) +
+      scale_color_manual(values = c("#377EB8","#E41A1C")) +
+      geom_jitter(
+        data = mtt.dat,
+        aes(x = Dose, y = mean, fill = Group),
+        size = 2,
+        width = 0.1,
+        shape = 21,
+        color = "black"
+      ) +
+   scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+      stat_compare_means(
+        data = mtt.dat,
+        aes(x = Dose,
+            y = mean, group = Group),
+        label = "p.signif",
+        method = "t.test"
+      ) +
+      theme_publication() +
+      xlab("concentration (uM) ") +
+      ylab("% MTT Proliferation") +
+      scale_x_continuous(
+        breaks = log_breaks(n = 10),
+        trans = log10_trans(),
+        labels = function(n) {
+          format(n, scientific = FALSE)
+        }
+      ) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 120)) +
+      stat_smooth(
+        method = "drm",
+        method.args = list(fct = L.4(
+          names = c("hill", "min_value", "max_value", "ec_50")
+        )),
+        se = FALSE,
+        aes(y = mean, color = Group),
+        size = 2
+      ) +
+      geom_hline(yintercept = 50, lty = "dotted") +
+      annotation_logticks(sides = "b") +
+      ggtitle("Proliferation ARC39") +
+      theme(legend.position = c(0.1, 0.2))
+
+  print(p)
+  
+  ggsave("20260227_MTT_activity/mtt_proliferation.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+  
+  
+  ED50 <-
+      drm(mean ~ Dose,
+          Group,
+          data = mtt.dat,
+          fct = LL.4(names = c("b", "lower", "upper", "ed50")))
+    
+summary(ED50)
+    
+    ed.summary <- ED(ED50, c(50), interval = "delta")
+    
+    
+
+```
+
+
+
+
+## ARC39 Activity
+
+```{r}
+df <- readxl::read_xlsx("20260227_MTT_activity/Smpd1 activity-ARC39-analysis.xlsx", 2)
+
+
+
+### replace zero to 0.001 for concentration
+df$Dose[df$Dose == 0] <-0.001
+
+
+
+
+### mean and sd
+mtt.dat <- df %>%
+  filter(Group == "WT") %>%
+  group_by(Group, Dose) %>%
+  summarize(mean = mean(Activity),
+            sd = sd(Activity))
+
+
+
+
+p <- ggplot(mtt.dat, 
+            aes(
+              x = Dose, 
+              y = mean, 
+              color = Group
+    )) +
+      geom_errorbar(
+        aes(ymax = mean + sd, ymin = mean - sd),
+        lwd = 1,
+        alpha = 0.5
+      ) +
+      scale_color_manual(values = c("#E41A1C")) +
+      geom_jitter(
+        data = mtt.dat,
+        aes(x = Dose, y = mean, fill = Group),
+        size = 2,
+        width = 0.1,
+        shape = 21,
+        color = "black"
+      ) +
+   scale_fill_manual(values = c("#E41A1C")) +
+      stat_compare_means(
+        data = mtt.dat,
+        aes(x = Dose,
+            y = mean, group = Group),
+        label = "p.signif",
+        method = "t.test"
+      ) +
+      theme_publication() +
+      xlab("concentration (uM) ") +
+      ylab("% Smpd1 Activity") +
+      scale_x_continuous(
+        breaks = log_breaks(n = 10),
+        trans = log10_trans(),
+        labels = function(n) {
+          format(n, scientific = FALSE)
+        }
+      ) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 120)) +
+      stat_smooth(
+        method = "drm",
+        method.args = list(fct = L.4(
+          names = c("hill", "min_value", "max_value", "ec_50")
+        )),
+        se = FALSE,
+        aes(y = mean, color = Group),
+        size = 2
+      ) +
+      geom_hline(yintercept = 50, lty = "dotted") +
+      annotation_logticks(sides = "b") +
+      ggtitle("ARC39 Activity") +
+      theme(legend.position = c(0.1, 0.2))
+
+  print(p)
+  
+  ggsave("20260227_MTT_activity/arc_smpd1_activity.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+  
+  
+  ED50 <-
+      drm(mean ~ Dose,
+          Group,
+          data = mtt.dat,
+          fct = LL.4(names = c("b", "lower", "upper", "ed50")))
+    
+summary(ED50)
+    
+    ed.summary <- ED(ED50, c(50), interval = "delta")
+    
+    
+
+```
+
+## human metabolome
+```{r}
+
+cells.dat <- read_xlsx("../../Data/Metabolome/human_cell_lines/KLUM-01-19MDCLP CLP CDT.XLSX", 
+                        "Species Concentrations", 
+                        skip=20)
+
+cells.metadata <- read_xlsx("../../Data/Metabolome/human_cell_lines/KLUM-01-19MDCLP HD4 CDT.XLSX",  "metadata")
+
+imputed.data<- cells.dat %>%
+  dplyr::select(-Class, - `Group Units`) %>% 
+  mutate(across(where(is.numeric), ~replace_na(.,0))) 
+
+colnames(imputed.data)[1] <- "MetaboliteName"
+
+metadata <- cells.metadata 
+## assign column names
+#colnames(imputed.data) <- metadata$CELL_GENOTYPE
+
+library(metapacR)
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  dplyr::mutate(across(everything(), as.character)) %>%
+  dplyr::rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME")) %>%
+  mutate_all(na_if,"") %>%
+  distinct()
+
+imputed.data <- imputed.data %>%
+  inner_join(metabolite.class, by = "MetaboliteName")
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  filter(SUPER_PATHWAY %in% c("Lipid", "Complex lipids")) %>%
+  filter(grepl("^CER|^SM",MetaboliteName)) %>%
+  separate(col=MetaboliteName, into = c("Metabolite", "chain_length"), sep = "[(]") %>%
+  dplyr::mutate(chain_length = gsub("[)]", "", chain_length))  %>%
+  filter(Metabolite %in% c("CER", "SM")) %>%
+  distinct() 
+
+
+df <- imputed.data.total[,1:43] %>%
+  pivot_longer(cols= -c("Metabolite", "chain_length"), names_to = "CLIENT IDENTIFIER", values_to = "values") %>%
+  inner_join(metadata, by = "CLIENT IDENTIFIER") %>%
+  filter(`CELL LINE` %in% c("PaTuT", "PaTuS")) %>%
+  filter(KO_STATUS %in% c("WT")) %>%
+  dplyr::select(Metabolite, chain_length,`CLIENT IDENTIFIER`,`CELL LINE`,chain_length,values) %>%
+  distinct()
+
+df <- janitor::clean_names(df)
+
+# 1) Mean ± SD per diagnosis (2 decimals)
+stats_wide <- df %>%
+  group_by(metabolite, chain_length, cell_line) %>%
+  summarise(
+    mean = mean(values, na.rm = TRUE),
+    sd   = sd(values, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(`Mean ± SD` = sprintf("%.2f ± %.2f", mean, sd)) %>%
+  dplyr::select(metabolite, chain_length, cell_line, `Mean ± SD`) %>%
+  pivot_wider(names_from = cell_line, values_from = `Mean ± SD`)
+
+# 2) P-values (3 decimals, with <0.001 formatting)
+pvals <- df %>%
+  filter(!is.na(values), !is.na(cell_line)) %>%
+  group_by(metabolite, chain_length) %>%
+  summarise(
+    p_raw = {
+      dx <- droplevels(factor(cell_line))
+      if (nlevels(dx) != 2) NA_real_ else
+        tryCatch(t.test(values ~ dx)$p.value, error = function(e) NA_real_)
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_raw, method = "BH"),
+    # Formatting function for 3 decimals or <0.001
+    p_value = sprintf("%.4f", p_raw),
+    p_fdr   = sprintf("%.4f", p_adj)
+  ) %>%
+  dplyr::select(metabolite, chain_length, p_value, p_fdr)
+
+# 3) Final summary table
+summary_table <- stats_wide %>%
+  left_join(pvals, by = c("metabolite", "chain_length")) %>%
+  arrange(metabolite, chain_length)
+
+write.csv(summary_table, "summary_table_sm_cer_cell_line.csv")
+  
+
+df$cell_line <- factor(df$cell_line, levels = c("PaTuT", "PaTuS"))
+
+p <- ggplot(df,
+            aes(x= chain_length,
+                y=values,
+                fill=cell_line)) +
+  geom_boxplot(size=0.1) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Concentration in nmol/mg of protein")
+
+stat.test <- df %>%
+  group_by(chain_length, metabolite) %>%
+  t_test(values ~ cell_line) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>%
+  add_xy_position(x = "chain_length", dodge = 0.8) +
+
+
+p <- p + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0,
+  angle = 90
+  )  +
+  facet_grid(~metabolite, scales="free")
+
+print(p)
+
+ggsave("cer_sm_individual_abs.pdf",
+       plot = p, 
+       width = 15,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+
+### ratio
+
+
+df <- df %>%
+  group_by(chain_length, client_identifier, cell_line) %>%
+  summarise_if(is.numeric,funs(.[metabolite == "CER"] / .[metabolite == "SM"])) %>%
+  ungroup()
+  
+df[sapply(df, is.infinite)] <- NA 
+
+
+df$cell_line <- factor(df$cell_line, levels = c("PaTuT", "PaTuS"))
+
+
+# 1) Mean ± SD per diagnosis (2 decimals)
+stats_wide <- df %>%
+  group_by(chain_length, cell_line) %>%
+  summarise(
+    mean = mean(values, na.rm = TRUE),
+    sd   = sd(values, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(`Mean ± SD` = sprintf("%.2f ± %.2f", mean, sd)) %>%
+  dplyr::select(chain_length, cell_line, `Mean ± SD`) %>%
+  pivot_wider(names_from = cell_line, values_from = `Mean ± SD`)
+
+# 2) P-values (3 decimals, with <0.001 formatting)
+pvals <- df %>%
+  filter(!is.na(values), !is.na(cell_line)) %>%
+  group_by(chain_length) %>%
+  summarise(
+    p_raw = {
+      dx <- droplevels(factor(cell_line))
+      if (nlevels(dx) != 2) NA_real_ else
+        tryCatch(t.test(values ~ dx)$p.value, error = function(e) NA_real_)
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_raw, method = "BH"),
+    # Formatting function for 3 decimals or <0.001
+    p_value = sprintf("%.4f", p_raw),
+    p_fdr   = sprintf("%.4f", p_adj)
+  ) %>%
+  dplyr::select(chain_length, p_value, p_fdr)
+
+# 3) Final summary table
+summary_table <- stats_wide %>%
+  left_join(pvals, by = c("chain_length")) %>%
+  arrange(chain_length)
+
+write.csv(summary_table, "summary_table_sm_cer_ratio_cell_line.csv")
+  
+
+p <- ggplot(df,
+            aes(x= chain_length,
+                y=values,
+                fill=cell_line)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("CER/SM ratio")
+
+stat.test <- df %>%
+  group_by(chain_length) %>%
+  t_test(values ~ cell_line) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>%
+  add_xy_position(x = "chain_length", dodge = 0.8)
+
+
+p <- p + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0,
+  angle = 90
+  ) 
+
+print(p)
+
+ggsave("cer_sm_ratio_abs.pdf",
+       plot = p, 
+       width = 15,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+```
+
+## liposomes
+```{r}
+dat <- readxl::read_excel("20260228_liposomes/Liposom_Cermide_staining_Results.xlsx")
+
+
+dat$`CER/SM ratio` <- factor (dat$`CER/SM ratio`, levels = c("50:50", "90:10"))
+
+
+ p <- ggplot(dat,
+             aes(x=`CER/SM ratio`,
+                 y=`Average of Intensity_MeanIntensity_liposome`, 
+                 fill = `CER/SM ratio`)) +
+   geom_violin(alpha=0.5) +
+   geom_boxplot(
+                width=0.1,
+               color="black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=dat, 
+                     aes(x=`CER/SM ratio`,
+                 y=`Average of Intensity_MeanIntensity_liposome`), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Mean Flouroscence Intensity / liposome") +
+  ggtitle("Ceramide IF") 
+   
+print(p)
+
+ggsave("20260228_liposomes/ceramide_if.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm") 
+```
+## human metabolome METAPAC
+```{r}
+
+dat <- readRDS("Metabolon_data/expData_metabolon_untargeted.rds")
+
+imputed.data<- dat$raw.counts %>%
+  #mutate(across(where(is.numeric), ~replace_na(.,0))) %>%
+  sjmisc::rotate_df(cn=TRUE, rn="MetaboliteName")
+
+metadata <- dat$metadata
+
+library(metapacR)
+## annotate chemical metadata
+data("chemicalMetadata")
+metabolite.class <- force(chemicalMetadata)
+
+metabolite.class <- metabolite.class %>%
+  dplyr::mutate(across(everything(), as.character)) %>%
+  dplyr::rename(c("Metabolite" = "MET_CHEM_NO",
+           "MetaboliteName" = "CHEMICAL_NAME")) %>%
+  mutate_all(na_if,"") %>%
+  distinct()
+
+imputed.data <- imputed.data %>%
+  inner_join(metabolite.class, by = "MetaboliteName")
+
+##----------------------------------------------------------------
+##                      total plot                      --
+##----------------------------------------------------------------
+imputed.data.total <- imputed.data %>%
+  filter(SUPER_PATHWAY %in% c("Lipid", "Complex lipids")) %>%
+  filter(grepl("^CER|^SM",MetaboliteName)) %>%
+  separate(col=MetaboliteName, into = c("Metabolite", "chain_length"), sep = "[(]") %>%
+  dplyr::mutate(chain_length = gsub("[)]", "", chain_length))  %>%
+  filter(Metabolite %in% c("CER", "SM")) %>%
+  distinct() 
+
+
+df <- imputed.data.total[,1:1327] %>%
+  pivot_longer(cols= -c("Metabolite", "chain_length"), names_to = "LB01=LB03", values_to = "values") %>%
+  inner_join(metadata, by = "LB01=LB03") %>%
+  mutate(diagnosis=if_else(cummulative_diagnosis == "Pankreaskarzinom", "PDAC", "Rest")) %>%
+  dplyr::select(Metabolite, chain_length,`LB01=LB03`,diagnosis,chain_length,values) %>%
+  distinct() %>%
+  drop_na(diagnosis) %>%
+  ungroup()
+
+
+# 1) Mean ± SD per diagnosis (2 decimals)
+stats_wide <- df %>%
+  group_by(Metabolite, chain_length, diagnosis) %>%
+  summarise(
+    mean = mean(values, na.rm = TRUE),
+    sd   = sd(values, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(`Mean ± SD` = sprintf("%.2f ± %.2f", mean, sd)) %>%
+  select(Metabolite, chain_length, diagnosis, `Mean ± SD`) %>%
+  pivot_wider(names_from = diagnosis, values_from = `Mean ± SD`)
+
+# 2) P-values (3 decimals, with <0.001 formatting)
+pvals <- df %>%
+  filter(!is.na(values), !is.na(diagnosis)) %>%
+  group_by(Metabolite, chain_length) %>%
+  summarise(
+    p_raw = {
+      dx <- droplevels(factor(diagnosis))
+      if (nlevels(dx) != 2) NA_real_ else
+        tryCatch(t.test(values ~ dx)$p.value, error = function(e) NA_real_)
+    },
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p_raw, method = "BH"),
+    # Formatting function for 3 decimals or <0.001
+    p_value = sprintf("%.4f", p_raw),
+    p_fdr   = sprintf("%.4f", p_adj)
+  ) %>%
+  select(Metabolite, chain_length, p_value, p_fdr)
+
+# 3) Final summary table
+summary_table <- stats_wide %>%
+  left_join(pvals, by = c("Metabolite", "chain_length")) %>%
+  arrange(Metabolite, chain_length)
+
+write.csv(summary_table, "Metabolon_data/summary_table_sm_cer.csv")
+
+df$diagnosis <- factor(df$diagnosis, levels = c("PDAC", "Rest"))
+
+writexl::write_xlsx(df, "Metabolon_data/Cer_sm_qunatification.xlsx")
+
+p <- ggplot(df,
+            aes(x= chain_length,
+                y=values,
+                fill=diagnosis)) +
+  geom_boxplot(size=0.1) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Concentration in uM") 
+
+stat.test <- df %>%
+  group_by(chain_length, Metabolite) %>%
+  t_test(values ~ diagnosis) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>%
+  add_xy_position(x = "chain_length", dodge = 0.8)
+
+
+p <- p   +
+  facet_wrap(~Metabolite, scale="free", ncol = 1) + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0,
+  angle = 90
+  )
+
+print(p)
+
+ggsave("Metabolon_data/cer_sm_individual_abs.pdf",
+       plot = p, 
+       width = 15,
+       height = 15,
+       dpi = 300,
+       units = "cm")
+
+
+### ratio
+
+df <- df %>%
+  group_by(chain_length, `LB01=LB03`, diagnosis) %>%
+  summarise_if(is.numeric,funs(.[Metabolite == "CER"] / .[Metabolite == "SM"])) %>%
+  ungroup()
+  
+df[sapply(df, is.infinite)] <- 0
+
+
+df$diagnosis <- factor(df$diagnosis, levels = c("PDAC", "Rest"))
+
+
+p <- ggplot(df,
+            aes(x= chain_length,
+                y=values,
+                fill=diagnosis)) +
+  geom_boxplot() +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("CER/SM ratio")
+
+stat.test <- df %>%
+  group_by(chain_length) %>%
+  t_test(values ~ diagnosis) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>%
+  add_xy_position(x = "chain_length", dodge = 0.8)
+
+
+p <- p + stat_pvalue_manual(
+  stat.test,  label = "p", tip.length = 0,
+  angle = 90
+  ) + scale_y_continuous(
+        breaks = log_breaks(n = 10),
+        trans = log10_trans(),
+        labels = function(n) {
+          format(n, scientific = FALSE)
+        }
+      )
+
+print(p)
+
+ggsave("Metabolon_data/cer_sm_ratio_abs.pdf",
+       plot = p, 
+       width = 15,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+
+```
+
+## Proteome heatmap
+
+```{r}
+save_pheatmap_pdf <- function(x, filename, width=7, height=7) {
+   stopifnot(!missing(x))
+   stopifnot(!missing(filename))
+   pdf(filename, width=width, height=height)
+   grid::grid.newpage()
+   grid::grid.draw(x$gtable)
+   dev.off()
+}
+
+df <- readxl::read_excel("20260202_proteome/Proteins_HeatMap.xlsx", "All")
+
+metadata <- readxl::read_excel("20260202_proteome/Proteins_HeatMap.xlsx", "metadata")
+
+phenodata <- df[, 1:5] %>%
+  column_to_rownames("T: Genes")
+
+
+mat <- as.matrix(sapply(df[, 6:23], as.numeric))
+
+mat[is.nan(mat)] <- 0
+
+rownames(mat) <- rownames(phenodata)
+
+ann <- data.frame(Status = metadata$Group,
+                  Clone =metadata$Clone, 
+                  Treatment=metadata$Treatment)
+
+rownames(ann) <- colnames(mat)
+
+ann_row <- data.frame(Cluster = phenodata$Catagories)
+rownames(ann_row) <- rownames(phenodata)
+
+Status.col <- c("#377EB8","#E41A1C")
+names(Status.col) <- unique(ann$Status)
+
+
+Treatment.col <- c("#66C2A5","#FC8D62")
+names(Treatment.col) <- unique(ann$Treatment)
+
+Clone.col <- c("#D1E5F0","#B2182B","#EF8A62","#FDDBC7")
+names(Clone.col) <- unique(ann$Clone)
+
+Cluster.col <- brewer.pal(9, "Set1")
+names(Cluster.col) <- unique(ann_row$Cluster)
+
+
+combo.cols <- list(Status = Status.col,
+                     Clone = Clone.col,
+                   Treatment = Treatment.col,
+                   Cluster = Cluster.col)
+
+p <- pheatmap::pheatmap(mat, 
+                   annotation_col = ann, 
+                   annotation_row = ann_row,
+                   annotation_colors = combo.cols,
+                   scale = "row", 
+                   col = colorRampPalette(rev(brewer.pal(40, "RdBu")))(40),
+                   fontsize_row = 6,
+                   fontsize_col = 6,
+                   border_color = NA,
+                   cluster_rows = FALSE, 
+                   cluster_cols = FALSE,
+                   show_colnames = FALSE)
+  
+  print(p)
+  
+  save_pheatmap_pdf(p,
+                  "20260202_proteome/heatmap.pdf",
+                  width=5,
+                  height=6)
+
+```
+
+## ihc staining
+```{r}
+colony <- read_excel("20260205_invivo_expt/aSMA-measurements-orthotop-analysis.xlsx")
+colony$group <- factor(colony$group, levels=c("WT", "KO"))
+colony$strain <- factor(colony$strain, levels=c("WT", "Smpd1"))
+
+colony$value <- colony$`total aSMA positive in %`
+
+colony <- colony %>%
+  filter(!clone == "C3" | !strain =="Smpd1",)
+ 
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= group, 
+                  y= value,
+                  fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= group, 
+                  y= value, 
+                  fill=clone),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= group, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("total aSMA positive in %") +
+  ggtitle("aSMA") +
+  facet_grid(~strain, ,
+             scales="free_x",
+             space='free_x')
+
+print(p)
+
+ggsave("20260205_invivo_expt/aSMA_positive.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+
+colony <- read_excel("20260205_invivo_expt/CD31-measurements-orthotop analysis.xlsx")
+colony$group <- factor(colony$group, levels=c("WT", "KO"))
+colony$strain <- factor(colony$strain, levels=c("WT", "Smpd1"))
+
+colony$value <- colony$`total CD31 positive in %`
+
+colony <- colony %>%
+  filter(!clone == "C3" | !strain =="Smpd1",)
+
+p <- ggplot(data=colony) +
+  geom_boxplot(aes(x= group, 
+                  y= value,
+                  fill=group), 
+               color="black",
+               show.legend = FALSE) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  ggnewscale::new_scale_fill() +
+  geom_jitter(aes(x= group, 
+                  y= value, 
+                  fill=clone),
+              size=3, 
+              width = 0.4, 
+              shape = 21, 
+              color= "black",
+              alpha= 0.8) +
+  stat_compare_means(data=colony, 
+                     aes(x= group, 
+                         y= value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  scale_fill_manual(values = c("#B2182B", "#D1E5F0")) +
+  theme_bw() +
+  xlab("") +
+  ylab("total CD31 positive in %") +
+  ggtitle("Cd31") +
+  facet_grid(~strain, ,
+             scales="free_x",
+             space='free_x')
+
+print(p)
+
+ggsave("20260205_invivo_expt/CD31_positive.pdf",
+       plot = p, 
+       width = 10,
+       height = 7,
+       dpi = 300,
+       units = "cm")
+```
+
+## MRTX resistanct cells
+
+```{r}
+scriptLibraries <-  c("here",
+                      "tidyverse",
+                      "GEOquery",
+                      "biomaRt",
+                      "SummarizedExperiment",
+                      "DESeq2",
+                      "limma")
+##---------------------------------------------------------------
+##                      load functions                    --
+##---------------------------------------------------------------
+source("https://raw.githubusercontent.com/umahajanatlmu/useful_commands/main/auxillary/basicFunctions.R")
+##---------------------------------------------------------------
+##                        load packages                        --
+##---------------------------------------------------------------
+installScriptLibs(scriptLibraries)
+```
+
+
+### human cells
+```{r}
+files <- list.files("20260228_MRTX_res/GSE269985_RAW/Human",
+                    full.names = TRUE)
+i <- 1
+ 
+for (f in files) {
+  gsm <- gsub(".*(GSM[0-9]+).*", "\\1", f)
+  
+  if ( i == 1) {
+    df <- read.csv(f) 
+  
+  colnames(df)[3] <- gsm
+  } else {
+    df1 <- read.csv(f) 
+  
+  colnames(df1)[3] <- gsm
+  
+  df <- df %>%
+    inner_join(df1, by =c("gene", "ensembl_id"))
+  }
+  
+  i <- i +1
+}
+
+df_h <- df %>%
+  filter(if_all(everything(), ~ .x != "")) %>%
+  dplyr::select(-ensembl_id) %>%
+  distinct(gene, .keep_all = TRUE) %>%
+  column_to_rownames("gene")
+
+metadata <- read.csv("20260228_MRTX_res/SraRunTable.csv", sep=";")
+metadata <- metadata[metadata$Sample.Name %in% colnames(df_h),]
+
+df_h <- log2(df_h+1) %>%
+  sjmisc::rotate_df() %>%
+  dplyr::select("SMPD1") %>%
+  rownames_to_column("Sample.Name") %>%
+  inner_join(metadata,by ="Sample.Name") %>%
+  mutate(organism= "human")
+
+p <- ggplot(df_h,
+            aes(x=cell_line,
+                y=SMPD1,
+                fill=Treatment)) +
+  geom_boxplot(show.legend = FALSE) +
+  geom_jitter(size=3, 
+               position=position_jitterdodge(jitter.width = 0.5), 
+              shape = 21, 
+              color= "black",
+              alpha= 0.5) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=df_h, 
+                     aes(x= cell_line, 
+                         y= SMPD1), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  ylab("SMPD1 Normalized Expression") +
+  ggtitle("MRTx1133 resistance")
+
+print(p)
+
+ggsave("20260228_MRTX_res/resistance_smpd1.pdf",
+       plot = p, 
+       width = 9,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+```
+
+
+```{r}
+files <- list.files("20260228_MRTX_res/GSE269985_RAW/Human",
+                    full.names = TRUE)
+i <- 1
+ 
+for (f in files) {
+  gsm <- gsub(".*(GSM[0-9]+).*", "\\1", f)
+  
+  if ( i == 1) {
+    df <- read.csv(f) 
+  
+  colnames(df)[3] <- gsm
+  } else {
+    df1 <- read.csv(f) 
+  
+  colnames(df1)[3] <- gsm
+  
+  df <- df %>%
+    inner_join(df1, by =c("gene", "ensembl_id"))
+  }
+  
+  i <- i +1
+}
+
+df_h <- df %>%
+  filter(if_all(everything(), ~ .x != "")) %>%
+  dplyr::select(-ensembl_id) %>%
+  distinct(gene, .keep_all = TRUE) %>%
+  column_to_rownames("gene")
+
+metadata <- read.csv("20260228_MRTX_res/SraRunTable.csv", sep=";")
+metadata <- metadata[metadata$Sample.Name %in% colnames(df_h),]
+
+df_h <- log2(df_h+1) %>%
+  sjmisc::rotate_df() %>%
+  dplyr::select("SMPD1") %>%
+  rownames_to_column("Sample.Name") %>%
+  inner_join(metadata,by ="Sample.Name") %>%
+  mutate(organism= "human")
+
+p <- ggplot(df_h,
+            aes(x=cell_line,
+                y=SMPD1,
+                fill=Treatment)) +
+  geom_boxplot(show.legend = FALSE) +
+  geom_jitter(size=3, 
+               position=position_jitterdodge(jitter.width = 0.5), 
+              shape = 21, 
+              color= "black",
+              alpha= 0.5) +
+  scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+  stat_compare_means(data=df_h, 
+                     aes(x= cell_line, 
+                         y= SMPD1), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  ylab("SMPD1 Normalized Expression") +
+  ggtitle("MRTx1133 resistance")
+
+print(p)
+
+ggsave("20260228_MRTX_res/resistance_smpd1.pdf",
+       plot = p, 
+       width = 9,
+       height = 10,
+       dpi = 300,
+       units = "cm")
+```
+
+
+## Akt Inh- WT vs KO
+
+```{r}
+df <- readxl::read_xlsx("20260226_Akt/summary-Akt-inhibitor-Jianying.xlsx", 3)
+
+
+
+### replace zero to 0.001 for concentration
+df$Dose[df$Dose == 0] <-0.001
+
+
+### mean and sd
+mtt.dat <- df %>%
+  filter(Hours == 72) %>%
+  group_by(Group, Dose, Hours) %>%
+  summarize(mean = mean(MTT),
+            sd = sd(MTT))
+
+
+mtt.dat$Group <- factor(mtt.dat$Group, levels=c("WT", "KO"))
+
+p <- ggplot(mtt.dat, 
+            aes(
+              x = Dose, 
+              y = mean, 
+              color = Group
+    )) +
+      geom_errorbar(
+        aes(ymax = mean + sd, ymin = mean - sd),
+        lwd = 1,
+        alpha = 0.5
+      ) +
+      scale_color_manual(values = c("#377EB8","#E41A1C")) +
+      geom_jitter(
+        data = mtt.dat,
+        aes(x = Dose, y = mean, fill = Group),
+        size = 2,
+        width = 0.1,
+        shape = 21,
+        color = "black"
+      ) +
+   scale_fill_manual(values = c("#377EB8","#E41A1C")) +
+      stat_compare_means(
+        data = mtt.dat,
+        aes(x = Dose,
+            y = mean, group = Group),
+        label = "p.signif",
+        method = "t.test"
+      ) +
+      theme_publication() +
+      xlab("concentration (uM) ") +
+      ylab("% MTT Proliferation") +
+      scale_x_continuous(
+        breaks = log_breaks(n = 10),
+        trans = log10_trans(),
+        labels = function(n) {
+          format(n, scientific = FALSE)
+        }
+      ) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 120)) +
+      stat_smooth(
+        method = "drm",
+        method.args = list(fct = L.4(
+          names = c("hill", "min_value", "max_value", "ec_50")
+        )),
+        se = FALSE,
+        aes(y = mean, color = Group),
+        size = 2
+      ) +
+      geom_hline(yintercept = 50, lty = "dotted") +
+      annotation_logticks(sides = "b") +
+      ggtitle("Proliferation Akt Inh") +
+      theme(legend.position = c(0.1, 0.2))
+
+  print(p)
+  
+  ggsave("20260226_Akt/mtt_proliferation_KO.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+  
+  
+  ED50 <-
+      drm(mean ~ Dose,
+          Group,
+          data = mtt.dat,
+          fct = LL.4(names = c("b", "lower", "upper", "ed50")))
+    
+summary(ED50)
+    
+    ed.summary <- ED(ED50, c(50), interval = "delta")
+    
+    
+
+```
+
+## Synergism
+```{r}
+library(synergyfinder)
+screening_data <- readxl::read_excel("20260226_Akt/ARC39-AKTinh-combination-analysis.xlsx", "rplot")
+
+screening_data <- screening_data %>%
+  filter(Hours == 72) %>%
+  group_by(conc_r, conc_c) %>%
+  mutate(response = median(response)) %>%
+  ungroup() %>%
+  unique()
+
+
+res <- ReshapeData(
+  data = screening_data,
+  data_type = "viability",
+  impute = TRUE,
+  impute_method = NULL,
+  noise = TRUE,
+  seed = 1)
+
+res <- CalculateSynergy(
+  data = res,
+  method = c("ZIP", "HSA", "Bliss", "Loewe"),
+  Emin = NA,
+  Emax = NA,
+  correct_baseline = "non")
+
+res1 <- CalculateSensitivity(
+  data = res,
+  correct_baseline = "non"
+)
+
+res1$drug_pairs
+
+p <- Plot2DrugContour(
+  data = res,
+  plot_block = 1,
+  drugs = c(1, 2),
+  plot_value = "ZIP_synergy",
+  dynamic = FALSE,
+  summary_statistic = c("mean","quantile_25", "quantile_75")
+) + theme_publication()  +
+  geom_contour(colour = "black",
+               size = 0.5) +
+  scale_fill_gradientn(
+    colours = colorRampPalette(rev(RColorBrewer::brewer.pal(10, "RdBu")))(100),
+    oob = scales::squish,
+    limits = c(-50, 50),
+    name = "Synergy score"
+  ) +
+  guides(fill = guide_colourbar(
+    barwidth = unit(0.3, "cm"),
+    ticks.colour = "black",
+    frame.colour = "black"
+  ))
+
+
+print(p)
+
+ggsave("20260226_Akt/synergy_score_72.pdf",
+       plot = p,
+       width = 10, 
+       height = 8,
+       units = "cm",
+       dpi = 300)
+
+
+screening_data <- readxl::read_excel("20260226_Akt/ARC39-AKTinh-combination-analysis.xlsx", "rplot")
+
+screening_data <- screening_data %>%
+  filter(Hours == 96) %>%
+  group_by(conc_r, conc_c) %>%
+  mutate(response = median(response)) %>%
+  ungroup() %>%
+  unique()
+
+
+res <- ReshapeData(
+  data = screening_data,
+  data_type = "viability",
+  impute = TRUE,
+  impute_method = NULL,
+  noise = TRUE,
+  seed = 1)
+
+res <- CalculateSynergy(
+  data = res,
+  method = c("ZIP", "HSA", "Bliss", "Loewe"),
+  Emin = NA,
+  Emax = NA,
+  correct_baseline = "non")
+
+res1 <- CalculateSensitivity(
+  data = res,
+  correct_baseline = "non"
+)
+
+res1$drug_pairs
+
+p <- Plot2DrugContour(
+  data = res,
+  plot_block = 1,
+  drugs = c(1, 2),
+  plot_value = "ZIP_synergy",
+  dynamic = FALSE,
+  summary_statistic = c("mean","quantile_25", "quantile_75")
+) + theme_publication()  +
+  geom_contour(colour = "black",
+               size = 0.5) +
+  scale_fill_gradientn(
+    colours = colorRampPalette(rev(RColorBrewer::brewer.pal(10, "RdBu")))(100),
+    oob = scales::squish,
+    limits = c(-50, 50),
+    name = "Synergy score"
+  ) +
+  guides(fill = guide_colourbar(
+    barwidth = unit(0.3, "cm"),
+    ticks.colour = "black",
+    frame.colour = "black"
+  ))
+
+
+print(p)
+
+ggsave("20260226_Akt/synergy_score_96.pdf",
+       plot = p,
+       width = 10, 
+       height = 8,
+       units = "cm",
+       dpi = 300)
+
+```
+
+## qPCR
+```{r}
+df <- read_excel("20260228_qPCR/EMT-qpcr-results-calculation-20260227-Ahmed.xlsx", "rplot")
+
+# 1. Calculate stats comparing only Group 2 and Group 3
+# Replace "Group 2" and "Group 3" with the actual names in your 'group' column
+stat.test <- df %>%
+  filter(group %in% c("StemXvivo", "StemXvivo+ARC39")) %>%
+  group_by(cell_line, gene) %>%
+  t_test(ddct ~ group) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_xy_position(x = "cell_line", dodge = 0.1) 
+
+# 2. Create the plot
+p <- ggplot(df, aes(x = cell_line, y = ddct, fill = group)) +
+  # Bar layer (all 3 groups will show because we use 'df' here)
+  stat_summary(
+    fun = mean, geom = "bar",
+    position = position_dodge(0.9), 
+    color = "black"
+  ) +
+  # Error bar layer
+  stat_summary(
+    fun.data = mean_sd, 
+    geom = "errorbar",
+    width = 0.25, 
+    position = position_dodge(0.9)
+  ) +
+  # Add the p-values (only for the Group 2 vs Group 3 comparison)
+  stat_pvalue_manual(
+    stat.test, 
+    label = "p"
+  ) +
+  scale_fill_manual(values = c("#377EB8", "#E41A1C", "#EF8A62")) +
+  facet_wrap(~gene) +
+  scale_y_continuous(trans = log2_trans()) +
+  theme_publication() +
+  labs(x = "", y = "Relative fold Changes", title = "EMT", fill = "")
+
+print(p)
+
+
+ggsave("20260228_qPCR/emt.pdf",
+       plot = p, 
+       width = 20,
+       height = 12,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+
+
+## Smpd1 Activity Resistance
+```{r}
+df <- read_excel("20260228_Smpd1_activities/Resistance cells-Smpd1 activity-analysis.xlsx", "rplot")
+
+p <- ggplot(df) +
+  geom_boxplot(aes(x=group,
+                 y=rel_value, 
+                 fill = group),
+               color = "black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C", "#EF8A62" )) +
+  stat_compare_means(data=df, 
+                     aes(x=group,
+                         y=rel_value), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Relative Changes") +
+  ggtitle("SMPD1 activity in Resistant cells") 
+   
+print(p)
+
+ggsave("20260228_Smpd1_activities/resistant_cells.pdf",
+       plot = p, 
+       width = 9,
+       height = 10,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+
+
+
+## Smpd1 Activity StemXVivo
+```{r}
+df <- read_excel("20260228_Smpd1_activities/PS+C1-B3.xlsx", "rplot")
+
+p <- ggplot(df) +
+  geom_boxplot(aes(x=cell_line,
+                 y=relative_change, 
+                 fill = group),
+               color = "black") +
+  scale_fill_manual(values = c("#377EB8","#E41A1C", "#EF8A62" )) +
+  stat_compare_means(data=df, 
+                     aes(x=cell_line,
+                         y=relative_change), 
+                     label = "..p..",
+                     show.legend = FALSE) +
+  theme_publication() +
+  xlab("") +
+  labs(fill="")+
+  ylab("Relative Changes") +
+  ggtitle("SMPD1 activity in Resistant cells") 
+   
+print(p)
+
+ggsave("20260228_Smpd1_activities/stemXvivo.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+
+
+
+
+## Smpd1 Sensitivity WT and KO
+```{r}
+df <- read_excel("20260228_Smpd1_activities/ARC39 treatment in WT and KO.xlsx", "rplot")
+
+### replace zero to 0.001 for concentration
+df$Dose[df$Dose == 0] <-0.001
+
+
+
+### mean and sd
+mtt.dat <- df %>%
+  filter(Group == "KO") %>%
+  group_by(Group, Dose) %>%
+  summarize(mean = mean(Activity),
+            sd = sd(Activity))
+
+df$Group <- factor(df$Group, levels = c("WT", "KO"))
+
+p <- ggplot(mtt.dat, 
+            aes(
+              x = Dose, 
+              y = mean, 
+              color = Group
+    )) +
+      geom_errorbar(
+        aes(ymax = mean + sd, ymin = mean - sd),
+        lwd = 1,
+        alpha = 0.5
+      ) +
+      scale_color_manual(values = c("#E41A1C")) +
+      geom_jitter(
+        data = mtt.dat,
+        aes(x = Dose, y = mean, fill = Group),
+        size = 2,
+        width = 0.1,
+        shape = 21,
+        color = "black"
+      ) +
+   scale_fill_manual(values = c("#E41A1C")) +
+      stat_compare_means(
+        data = mtt.dat,
+        aes(x = Dose,
+            y = mean, group = Group),
+        label = "p.signif",
+        method = "t.test"
+      ) +
+      theme_publication() +
+      xlab("concentration (uM) ") +
+      ylab("% Cell Viability") +
+      scale_x_continuous(
+        breaks = log_breaks(n = 10),
+        trans = log10_trans(),
+        labels = function(n) {
+          format(n, scientific = FALSE)
+        }
+      ) +
+      scale_y_continuous(expand = c(0, 0), limits = c(0, 120)) +
+      stat_smooth(
+        method = "drm",
+        method.args = list(fct = L.4(
+          names = c("hill", "min_value", "max_value", "ec_50")
+        )),
+        se = FALSE,
+        aes(y = mean, color = Group),
+        size = 2
+      ) +
+      geom_hline(yintercept = 50, lty = "dotted") +
+      annotation_logticks(sides = "b") +
+      ggtitle("Smpd1 Sensitivity") +
+      theme(legend.position = c(0.1, 0.2))
+
+  print(p)
+  
+  ggsave("20260228_Smpd1_activities/arc_wt_ko.pdf",
+       plot = p, 
+       width = 10,
+       height = 8,
+       dpi = 300,
+       units = "cm")
+  
+  
+  
+  ED50 <-
+      drm(mean ~ Dose,
+          Group,
+          data = mtt.dat,
+          fct = LL.4(names = c("b", "lower", "upper", "ed50")))
+    
+summary(ED50)
+    
+    ed.summary <- ED(ED50, c(50), interval = "delta")
+```
+
+
+## PanIN quant
+```{r}
+df <- read_excel("20260205_invivo_expt/PanIN_Quant_Reviewer_only.xlsx")
+
+# 1. Calculate stats comparing only Group 2 and Group 3
+# Replace "Group 2" and "Group 3" with the actual names in your 'group' column
+stat.test <- df %>%
+  group_by(Timepoint) %>%
+  t_test(`PanIN%` ~ Genotype) %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_xy_position(x = "Timepoint", dodge = 0.1) 
+
+df$Timepoint <- factor(df$Timepoint, levels = c(6,12))
+
+# 2. Create the plot
+p <- ggplot(df, aes(x = Timepoint, y = `PanIN%`, fill = Genotype)) +
+  geom_boxplot() +
+  # +
+  # Add the p-values (only for the Group 2 vs Group 3 comparison)
+  stat_pvalue_manual(
+    stat.test, 
+    label = "p"
+  ) +
+  scale_fill_manual(values = c("#377EB8", "#E41A1C")) +
+  theme_publication() +
+  labs(x = "", y = "% of PanIN/ mm2", title = "PanINs", fill = "")
+
+print(p)
+
+
+ggsave("20260205_invivo_expt/panin.pdf",
+       plot = p, 
+       width = 9,
+       height = 9,
+       dpi = 300,
+       units = "cm") 
+
+```
+
+
+
+
+
+# computing environment
+
+```{r}
+sessionInfo()
+```
